@@ -1,11 +1,12 @@
-import streamlit as st
-import requests
-import pandas as pd
+import os
 import time
 from io import BytesIO
 
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+import pandas as pd
+import requests
+import streamlit as st
 from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
 st.set_page_config(
     page_title="ORION AI",
@@ -14,6 +15,18 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# ---------------- BACKEND URL ----------------
+# Local fallback for your laptop
+BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
+
+# Streamlit Cloud secrets override if present
+try:
+    if "BACKEND_URL" in st.secrets:
+        BACKEND_URL = st.secrets["BACKEND_URL"]
+except Exception:
+    pass
+
+# ---------------- UI ----------------
 st.markdown("""
 <style>
 :root {
@@ -26,8 +39,6 @@ st.markdown("""
     --text: #f3f6ff;
     --muted: #9aa4b2;
     --accent: #8b5cf6;
-    --accent-soft: rgba(139,92,246,0.18);
-    --success: #22c55e;
 }
 
 .stApp {
@@ -116,6 +127,7 @@ html, body, [class*="css"] {
     line-height: 1.5;
 }
 
+/* SEARCH BAR FIX */
 .stTextInput {
     margin-bottom: 0.4rem;
 }
@@ -127,7 +139,7 @@ html, body, [class*="css"] {
 }
 
 .stTextInput > div > div > div {
-    background: rgba(17, 24, 39, 0.88) !important;
+    background: rgba(17, 24, 39, 0.92) !important;
     border: 1px solid rgba(148, 163, 184, 0.14) !important;
     border-radius: 18px !important;
     backdrop-filter: blur(8px);
@@ -141,17 +153,21 @@ html, body, [class*="css"] {
 
 .stTextInput input {
     background: transparent !important;
-    color: #e5e7eb !important;
+    color: #f8fafc !important;
+    -webkit-text-fill-color: #f8fafc !important;
     border: none !important;
     outline: none !important;
     padding: 1rem 1rem !important;
     font-size: 1rem !important;
     font-weight: 500 !important;
     caret-color: #c4b5fd !important;
+    opacity: 1 !important;
 }
 
 .stTextInput input::placeholder {
-    color: rgba(148,163,184,0.72) !important;
+    color: rgba(203,213,225,0.72) !important;
+    -webkit-text-fill-color: rgba(203,213,225,0.72) !important;
+    opacity: 1 !important;
 }
 
 .stButton {
@@ -500,7 +516,7 @@ if st.button("Run Research", use_container_width=False):
             time.sleep(0.15)
 
             response = requests.post(
-                "http://127.0.0.1:8000/research",
+                f"{BACKEND_URL}/research",
                 params={"query": query},
                 timeout=180
             )
@@ -509,7 +525,7 @@ if st.button("Run Research", use_container_width=False):
 
             data = safe_json(response)
             if data is None:
-                st.error("Backend returned an invalid response. Check backend terminal.")
+                st.error("Backend returned an invalid response. Check backend logs.")
                 if getattr(response, "text", ""):
                     st.code(response.text)
                 st.stop()
@@ -612,9 +628,9 @@ if st.button("Run Research", use_container_width=False):
             )
 
         except requests.exceptions.Timeout:
-            st.error("The request took too long. Try a shorter topic or check backend terminal.")
+            st.error("The request took too long. Try a shorter topic or check backend logs.")
         except requests.exceptions.ConnectionError:
-            st.error("Could not connect to backend. Make sure uvicorn is running on port 8000.")
+            st.error("Could not connect to backend. Set BACKEND_URL for deployment.")
         except Exception as e:
             st.error(f"Unexpected error: {e}")
 
