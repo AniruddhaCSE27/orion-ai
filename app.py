@@ -115,10 +115,6 @@ html, body, [class*="css"] {
     line-height: 1.5;
 }
 
-.stTextInput {
-    margin-bottom: 0.4rem;
-}
-
 .stTextInput > div > div {
     background: transparent !important;
     border: none !important;
@@ -132,11 +128,6 @@ html, body, [class*="css"] {
     backdrop-filter: blur(8px);
 }
 
-.stTextInput > div > div > div:focus-within {
-    border: 1px solid rgba(139,92,246,0.42) !important;
-    box-shadow: 0 0 0 1px rgba(139,92,246,0.10) !important;
-}
-
 .stTextInput input {
     background: transparent !important;
     color: #ffffff !important;
@@ -146,13 +137,14 @@ html, body, [class*="css"] {
     outline: none !important;
     padding: 1rem 1rem !important;
     font-size: 1rem !important;
-    font-weight: 600 !important;
-    caret-color: #c4b5fd !important;
+    font-weight: 700 !important;
+    caret-color: #ffffff !important;
+    text-shadow: none !important;
 }
 
 .stTextInput input::placeholder {
-    color: rgba(255,255,255,0.45) !important;
-    -webkit-text-fill-color: rgba(255,255,255,0.45) !important;
+    color: rgba(255,255,255,0.55) !important;
+    -webkit-text-fill-color: rgba(255,255,255,0.55) !important;
     opacity: 1 !important;
 }
 
