@@ -1,4 +1,3 @@
-import os
 import time
 from io import BytesIO
 
@@ -15,13 +14,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
-
-try:
-    if "BACKEND_URL" in st.secrets:
-        BACKEND_URL = st.secrets["BACKEND_URL"]
-except Exception:
-    pass
+BACKEND_URL = "https://orion-backend-s0e6.onrender.com"
 
 st.markdown("""
 <style>
@@ -34,7 +27,6 @@ st.markdown("""
     --border: rgba(255,255,255,0.08);
     --text: #f3f6ff;
     --muted: #9aa4b2;
-    --accent: #8b5cf6;
 }
 
 .stApp {
@@ -424,7 +416,7 @@ def generate_pdf(report_text):
     story.append(Paragraph("ORION AI Research Report", styles["Title"]))
     story.append(Spacer(1, 12))
 
-    for line in report_text.split("\\n"):
+    for line in report_text.split("\n"):
         line = line.strip()
         if not line:
             story.append(Spacer(1, 8))
@@ -525,6 +517,10 @@ if st.button("Run Research", use_container_width=False):
 
             if response.status_code != 200:
                 st.error(f"Backend HTTP error: {response.status_code}")
+                try:
+                    st.code(response.text)
+                except Exception:
+                    pass
                 st.stop()
 
             if not data.get("success", False):
@@ -627,7 +623,7 @@ if st.button("Run Research", use_container_width=False):
         except requests.exceptions.Timeout:
             st.error("The request took too long. Try a shorter topic or check backend logs.")
         except requests.exceptions.ConnectionError:
-            st.error("Could not connect to backend. Set BACKEND_URL for deployment.")
+            st.error("Could not connect to backend. Check your Render URL.")
         except Exception as e:
             st.error(f"Unexpected error: {e}")
 

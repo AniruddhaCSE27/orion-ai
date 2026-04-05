@@ -1,10 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import os
 
 app = FastAPI()
 
-# Allow frontend connection
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,18 +15,26 @@ app.add_middleware(
 def home():
     return {"status": "Backend is running 🚀"}
 
-@app.get("/research")
+@app.post("/research")
 def run_research(query: str):
     try:
         from agents.planner import plan
         from agents.researcher import research
         from agents.writer import write
 
-        plan_data = plan(query)
-        research_data = research(plan_data)
-        result = write(research_data)
+        plan_text = plan(query)
+        research_data = research(plan_text)
+        final_text = write(research_data)
 
-        return {"result": result}
+        return {
+            "success": True,
+            "plan": plan_text,
+            "research": research_data,
+            "final": final_text
+        }
 
     except Exception as e:
-        return {"error": str(e)}
+        return {
+            "success": False,
+            "error": str(e)
+        }
