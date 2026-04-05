@@ -115,6 +115,10 @@ html, body, [class*="css"] {
     line-height: 1.5;
 }
 
+.stTextInput {
+    margin-bottom: 0.4rem;
+}
+
 .stTextInput > div > div {
     background: transparent !important;
     border: none !important;
@@ -128,23 +132,23 @@ html, body, [class*="css"] {
     backdrop-filter: blur(8px);
 }
 
-.stTextInput input {
-    background: transparent !important;
-    color: #ffffff !important;
-    -webkit-text-fill-color: #ffffff !important;
-    opacity: 1 !important;
-    border: none !important;
-    outline: none !important;
-    padding: 1rem 1rem !important;
-    font-size: 1rem !important;
-    font-weight: 700 !important;
-    caret-color: #ffffff !important;
-    text-shadow: none !important;
+.stTextInput > div > div > div {
+    background: rgba(13, 18, 34, 0.98) !important;
+    border: 1px solid rgba(139, 92, 246, 0.28) !important;
+    border-radius: 18px !important;
+    box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.06),
+                inset 0 1px 2px rgba(0,0,0,0.3) !important;
+}
+
+.stTextInput > div > div > div:focus-within {
+    border: 1px solid rgba(139, 92, 246, 0.55) !important;
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.12),
+                inset 0 1px 2px rgba(0,0,0,0.3) !important;
 }
 
 .stTextInput input::placeholder {
-    color: rgba(255,255,255,0.55) !important;
-    -webkit-text-fill-color: rgba(255,255,255,0.55) !important;
+    color: rgba(255,255,255,0.45) !important;
+    -webkit-text-fill-color: rgba(255,255,255,0.45) !important;
     opacity: 1 !important;
 }
 

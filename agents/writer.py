@@ -6,7 +6,7 @@ load_dotenv()
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def write(plan_text, research_data):
+def write(plan_text: str, research_data):
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -14,8 +14,8 @@ def write(plan_text, research_data):
                 "role": "system",
                 "content": (
                     "You are an expert report writer. "
-                    "Write a polished, compact, professional final report with headings, short paragraphs, "
-                    "key insights, and a practical conclusion. Keep it readable and premium."
+                    "Write a polished, compact, professional final report with headings, "
+                    "short paragraphs, key insights, and a practical conclusion."
                 )
             },
             {
@@ -24,7 +24,7 @@ def write(plan_text, research_data):
 Use the plan and research data below to generate the final report.
 
 PLAN:
-{plan}
+{plan_text}
 
 RESEARCH DATA:
 {research_data}
@@ -32,4 +32,5 @@ RESEARCH DATA:
             }
         ]
     )
+
     return response.choices[0].message.content

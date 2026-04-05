@@ -14,8 +14,7 @@ def plan(query: str):
                 "role": "system",
                 "content": (
                     "You are a professional research planner. "
-                    "Create a concise, structured research plan with headings and bullet points. "
-                    "Keep it useful and not excessively long."
+                    "Create a concise, structured research plan with headings and bullet points."
                 )
             },
             {
@@ -24,4 +23,5 @@ def plan(query: str):
             }
         ]
     )
+
     return response.choices[0].message.content
