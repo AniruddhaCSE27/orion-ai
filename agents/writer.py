@@ -6,7 +6,7 @@ load_dotenv()
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def write(plan: str, research_data):
+def write(plan_text, research_data):
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
