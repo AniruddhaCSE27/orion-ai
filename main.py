@@ -1,13 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-
-from agents.planner import plan
-from agents.researcher import research
-from agents.writer import write
+import os
 
 app = FastAPI()
 
+# Allow frontend connection
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,30 +15,20 @@ app.add_middleware(
 
 @app.get("/")
 def home():
-    return {"message": "ORION AI Backend Running 🚀"}
+    return {"status": "Backend is running 🚀"}
 
-@app.post("/research")
+@app.get("/research")
 def run_research(query: str):
     try:
-        if not query or not query.strip():
-            return JSONResponse(
-                status_code=400,
-                content={"success": False, "error": "Query cannot be empty."}
-            )
+        from agents.planner import plan
+        from agents.researcher import research
+        from agents.writer import write
 
-        plan_text = plan(query)
-        research_data = research(plan_text)
-        final_report = write(plan_text, research_data)
+        plan_data = plan(query)
+        research_data = research(plan_data)
+        result = write(research_data)
 
-        return {
-            "success": True,
-            "plan": plan_text,
-            "research": research_data,
-            "final": final_report
-        }
+        return {"result": result}
 
     except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "error": str(e)}
-        )
+        return {"error": str(e)}
