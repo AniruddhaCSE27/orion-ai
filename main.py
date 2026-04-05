@@ -24,7 +24,9 @@ def run_research(query: str):
 
         plan_text = plan(query)
         research_data = research(plan_text)
-        final_text = write(research_data)
+
+        # ✅ FIXED HERE
+        final_text = write(plan_text, research_data)
 
         return {
             "success": True,
