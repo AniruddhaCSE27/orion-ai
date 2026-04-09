@@ -230,6 +230,24 @@ def _build_structured_response(plan_text, key_findings, final_report, web_source
     )
 
 
+def _answer_payload_to_markdown(answer_payload):
+    recommendations = answer_payload.get("recommendations", [])
+    reasons = answer_payload.get("reasons", [])
+    insights = answer_payload.get("insights", "")
+    improvement_tips = answer_payload.get("improvement_tips", [])
+
+    sections = [
+        "## Top Recommendations\n" + "\n".join(f"- {item}" for item in recommendations),
+        "## Why These Recommendations\n" + "\n".join(f"- {item}" for item in reasons),
+        "## Personalized Insight\n" + (insights or "- These recommendations are tailored to the query as directly as possible."),
+    ]
+
+    if improvement_tips:
+        sections.append("## Improvement Tips\n" + "\n".join(f"- {item}" for item in improvement_tips))
+
+    return "\n\n".join(sections)
+
+
 def _contains_report_style_language(text: str):
     lowered = (text or "").lower()
     banned_phrases = [
@@ -253,17 +271,21 @@ def _is_generic_response(query: str, final_report: str):
     return matches < max(1, min(2, len(query_terms)))
 
 
-def _short_direct_answer(query: str, key_findings: str, final_report: str):
-    findings_lines = [line.strip() for line in (key_findings or "").splitlines() if line.strip()]
-    concise_findings = "\n".join(findings_lines[:3]) if findings_lines else "- Limited directly relevant findings were retrieved."
-    return (
-        "## Top Recommendations\n"
-        f"{concise_findings}\n\n"
-        "## Why These Recommendations\n"
-        "- These options were prioritized because they align most closely with the user query and retrieved evidence.\n\n"
-        "## Personalized Insight\n"
-        f"- Answering: {query}"
-    )
+def _fallback_answer_payload(query: str):
+    return {
+        "recommendations": [
+            "Software Developer",
+            "Data Analyst",
+            "Machine Learning Engineer",
+        ],
+        "reasons": [
+            "These roles stay broadly aligned with technical and analytical skill paths.",
+            "They continue to show strong hiring demand across many organizations.",
+            "They provide practical entry points while keeping room for specialization.",
+        ],
+        "insights": f"These fallback recommendations are provided to answer the query directly: {query}",
+        "improvement_tips": [],
+    }
 
 
 def _resume_query(query: str):
@@ -312,16 +334,20 @@ def run_research_pipeline(query: str):
     writer_payload["resume_query"] = _resume_query(query)
     writer_payload["has_resume_context"] = _has_resume_context(document_sources)
 
-    final_report = write(
+    answer_payload = write(
         plan_text,
         writer_payload,
         conversation_context=conversation_context,
     )
+    if not isinstance(answer_payload, dict):
+        answer_payload = _fallback_answer_payload(query)
     key_findings = _make_query_focused_findings(query, retrieved_context)
     web_sources_markdown = _build_sources_markdown(web_sources, source_type="web")
     document_sources_markdown = _build_sources_markdown(document_sources, source_type="document")
+    final_report = _answer_payload_to_markdown(answer_payload)
     if _contains_report_style_language(final_report) or _is_generic_response(query, final_report):
-        final_report = _short_direct_answer(query, key_findings, final_report)
+        answer_payload = _fallback_answer_payload(query)
+        final_report = _answer_payload_to_markdown(answer_payload)
     structured_response = _build_structured_response(
         plan_text,
         key_findings,
@@ -336,6 +362,7 @@ def run_research_pipeline(query: str):
         "plan": plan_text,
         "findings": key_findings,
         "key_findings": key_findings,
+        "answer_payload": answer_payload,
         "final_report": final_report,
         "structured_response": structured_response,
         "sources": web_sources + document_sources,

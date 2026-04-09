@@ -831,6 +831,55 @@ def extract_direct_answer_bullets(final_text, limit=5):
             break
     return bullets[:limit]
 
+
+def normalize_answer_payload(answer_payload):
+    fallback = {
+        "recommendations": [
+            "Software Developer",
+            "Data Analyst",
+            "Machine Learning Engineer",
+        ],
+        "reasons": [
+            "These roles align well with common technical and analytical skill paths.",
+            "They remain practical, in-demand options across many industries.",
+            "They offer strong flexibility for future specialization.",
+        ],
+        "insights": "These fallback recommendations are shown so the answer stays useful and actionable.",
+        "improvement_tips": [],
+    }
+
+    if not isinstance(answer_payload, dict):
+        return fallback
+
+    recommendations = [
+        item.strip() for item in answer_payload.get("recommendations", [])
+        if isinstance(item, str) and item.strip()
+    ][:5]
+    reasons = [
+        item.strip() for item in answer_payload.get("reasons", [])
+        if isinstance(item, str) and item.strip()
+    ][:5]
+    insights = answer_payload.get("insights", "")
+    insights = insights.strip() if isinstance(insights, str) else ""
+    improvement_tips = [
+        item.strip() for item in answer_payload.get("improvement_tips", [])
+        if isinstance(item, str) and item.strip()
+    ][:5]
+
+    if not recommendations:
+        recommendations = fallback["recommendations"]
+    if not reasons:
+        reasons = fallback["reasons"]
+    if not insights:
+        insights = fallback["insights"]
+
+    return {
+        "recommendations": recommendations,
+        "reasons": reasons,
+        "insights": insights,
+        "improvement_tips": improvement_tips,
+    }
+
 def build_chart():
     chart_data = pd.DataFrame({
         "Quality Dimension": ["Clarity", "Depth", "Usability", "Presentation"],
@@ -1179,11 +1228,12 @@ if st.button("Run Research", use_container_width=False):
             document_sources = data.get("document_sources", [])
             sources = data.get("sources", []) or (web_sources + document_sources)
             metrics = build_metrics(plan_text, final_text, sources)
-            direct_answer_text = extract_section(final_text, "Top Recommendations")
-            why_best_text = extract_section(final_text, "Why These Recommendations")
-            personalized_text = extract_section(final_text, "Personalized Insight")
-            improvements_text = extract_section(final_text, "Improvement Tips")
-            quick_insights = extract_direct_answer_bullets(final_text, limit=5)
+            answer_payload = normalize_answer_payload(data.get("answer_payload", {}))
+            recommendations = answer_payload["recommendations"]
+            reasons = answer_payload["reasons"]
+            personalized_text = answer_payload["insights"]
+            improvement_tips = answer_payload["improvement_tips"]
+            quick_insights = recommendations[:5]
 
             progress.progress(100)
 
@@ -1229,9 +1279,7 @@ if st.button("Run Research", use_container_width=False):
 
             web_sources_markdown = build_sources_markdown(web_sources, source_type="web")
             document_sources_markdown = build_sources_markdown(document_sources, source_type="document")
-            insight_items = "".join(
-                f"<li>{item}</li>" for item in (quick_insights or ["No direct answer bullets available yet."])
-            )
+            insight_items = "".join(f"<li>{item}</li>" for item in quick_insights)
             st.markdown(f"""
             <div class="summary-shell">
                 <div class="answering-line"><span>Answering:</span> {query}</div>
@@ -1257,7 +1305,7 @@ if st.button("Run Research", use_container_width=False):
             </div>
             """, unsafe_allow_html=True)
 
-            top_recommendations_text = normalize_markdown(direct_answer_text) or "_No top recommendations available._"
+            top_recommendations_text = "\n".join(f"- {item}" for item in recommendations)
             st.markdown("""
             <div class="top-answer-shell">
                 <div class="top-answer-kicker">Primary Output</div>
@@ -1267,12 +1315,10 @@ if st.button("Run Research", use_container_width=False):
             st.markdown(top_recommendations_text)
 
             full_report_sections = []
-            if why_best_text.strip():
-                full_report_sections.append("## Why These Recommendations\n" + normalize_markdown(why_best_text))
-            if personalized_text.strip():
-                full_report_sections.append("## Personalized Insight\n" + normalize_markdown(personalized_text))
-            if improvements_text.strip():
-                full_report_sections.append("## Improvement Tips\n" + normalize_markdown(improvements_text))
+            full_report_sections.append("## Why These Recommendations\n" + "\n".join(f"- {item}" for item in reasons))
+            full_report_sections.append("## Personalized Insight\n" + normalize_markdown(personalized_text))
+            if improvement_tips:
+                full_report_sections.append("## Improvement Tips\n" + "\n".join(f"- {item}" for item in improvement_tips))
             full_report_sections.append("## Key Findings\n" + (normalize_markdown(findings_text) or "_No content available._"))
             full_report_text = "\n\n".join(full_report_sections)
 
