@@ -832,21 +832,172 @@ def extract_direct_answer_bullets(final_text, limit=5):
     return bullets[:limit]
 
 
-def normalize_answer_payload(answer_payload):
-    fallback = {
+def fallback_answer_payload(query_type="general", user_query=""):
+    if query_type == "resume":
+        return {
+            "primary_title": "Best Roles for You",
+            "recommendations": [
+                "Product-focused software roles",
+                "Data-oriented analyst roles",
+                "Automation-focused implementation roles",
+            ],
+            "reasons_title": "Why These Roles",
+            "reasons": [
+                "These suggestions stay useful when resume context is limited but the query is still career-oriented.",
+                "They map broadly to technical, analytical, and implementation-heavy strengths.",
+                "They can be refined further once profile-specific evidence is stronger.",
+            ],
+            "insights_title": "Strengths in Your Profile",
+            "insights": "Based on general assumptions, here are the best roles.",
+            "improvement_title": "Improvement Suggestions",
+            "improvement_tips": [
+                "Add measurable project outcomes and tools used.",
+                "Tailor the profile toward one role family at a time.",
+            ],
+            "extra_sections": [
+                {
+                    "title": "Skill Gaps",
+                    "items": [
+                        "Clarify one primary target role or stack.",
+                        "Show stronger evidence of ownership and impact.",
+                    ],
+                },
+                {
+                    "title": "Suggested Next Steps",
+                    "items": [
+                        "Prepare project stories with outcome-focused details.",
+                        "Refine the resume around one specific role direction.",
+                    ],
+                },
+            ],
+        }
+
+    if query_type == "study":
+        return {
+            "primary_title": "Chapter Summary",
+            "recommendations": [
+                "Important topics could not be extracted confidently from the uploaded study material yet.",
+                "Probable exam questions need a cleaner document index or a more specific chapter prompt.",
+                "Revision output should be retried after re-indexing the file.",
+            ],
+            "reasons_title": "Important Topics",
+            "reasons": [
+                "This looks like a document-study query, so the answer should come from uploaded material first.",
+                "The current response did not contain enough strong document-grounded output to safely show chapter-specific details.",
+                "Re-indexing the file or asking a more specific question should improve the answer quality.",
+            ],
+            "insights_title": "Revision Points",
+            "insights": "Document not properly indexed. Try re-indexing.",
+            "improvement_title": "Improvement Tips",
+            "improvement_tips": [],
+            "extra_sections": [
+                {"title": "2-mark Questions", "items": ["Please re-index the file or ask a narrower chapter question."]},
+                {"title": "5-mark Questions", "items": ["Please re-index the file or ask a narrower chapter question."]},
+                {"title": "10-mark Questions", "items": ["Please re-index the file or ask a narrower chapter question."]},
+            ],
+        }
+
+    if query_type == "document":
+        return {
+            "primary_title": "Summary",
+            "recommendations": [
+                "The uploaded document needs stronger indexing before a reliable summary can be generated.",
+                "The answer should be retried after re-indexing or with a more specific question.",
+                "Document-grounded questions will work best once chunk retrieval improves.",
+            ],
+            "reasons_title": "Important Topics",
+            "reasons": [
+                "This query depends on uploaded material rather than generic web context.",
+                "The current retrieval was too weak to safely claim document-specific details.",
+                "A cleaner index or narrower prompt should improve the next answer.",
+            ],
+            "insights_title": "Key Definitions / Concepts",
+            "insights": "Document not properly indexed. Try re-indexing.",
+            "improvement_title": "Improvement Tips",
+            "improvement_tips": [],
+            "extra_sections": [
+                {"title": "Probable Questions", "items": ["Please re-index the file or ask a more specific question."]},
+                {"title": "Short Answer Questions", "items": ["Please re-index the file or ask a more specific question."]},
+                {"title": "Long Answer Questions", "items": ["Please re-index the file or ask a more specific question."]},
+            ],
+        }
+
+    if query_type == "interview":
+        return {
+            "primary_title": "Top Interview Questions",
+            "recommendations": [
+                "Tell me about your most relevant project and your exact contribution.",
+                "What trade-offs did you make in your implementation?",
+                "How would you improve the solution if you rebuilt it today?",
+            ],
+            "reasons_title": "Focus Areas",
+            "reasons": [
+                "These questions test clarity, ownership, and technical depth.",
+                "They work as a practical fallback even when profile context is limited.",
+                "They can be expanded into a mock interview quickly.",
+            ],
+            "insights_title": "Difficulty Level",
+            "insights": "Start with foundational questions, then move into project depth and follow-up pressure questions.",
+            "improvement_title": "Follow-up Questions",
+            "improvement_tips": [
+                "How would you measure success?",
+                "What would you do differently next time?",
+            ],
+            "extra_sections": [
+                {
+                    "title": "Short Model Answers",
+                    "items": [
+                        "Use one project example with your role, action, and outcome.",
+                        "Keep answers concrete and tied to tools, decisions, and impact.",
+                    ],
+                }
+            ],
+        }
+
+    if query_type == "web":
+        return {
+            "primary_title": "Top Recommendations",
+            "recommendations": [
+                "Most relevant direct answer based on current web evidence",
+                "Most useful comparison point from retrieved sources",
+                "Most practical next step based on the evidence",
+            ],
+            "reasons_title": "Why These",
+            "reasons": [
+                "This fallback stays aligned to a current or web-oriented query.",
+                "It keeps the answer concise instead of drifting into a report.",
+                "It avoids unrelated recommendation types.",
+            ],
+            "insights_title": "Quick Insights",
+            "insights": f"This is a web-oriented fallback path for the query: {user_query}",
+            "improvement_title": "Improvement Tips",
+            "improvement_tips": [],
+            "extra_sections": [],
+        }
+
+    return {
+        "primary_title": "Direct Answer",
         "recommendations": [
-            "Software Developer",
-            "Data Analyst",
-            "Machine Learning Engineer",
+            "Refine the question to target the exact decision or topic you want answered",
+            "Focus the prompt on the most relevant evidence or subtopic",
+            "Use a narrower follow-up question for a more precise result",
         ],
+        "reasons_title": "Why This Answer",
         "reasons": [
-            "These roles align well with common technical and analytical skill paths.",
-            "They remain practical, in-demand options across many industries.",
-            "They offer strong flexibility for future specialization.",
+            "This fallback stays aligned to a general query instead of switching to an unrelated recommendation type.",
+            "A narrower prompt usually improves retrieval precision and answer quality.",
+            "The UI is preserving a useful response even when the payload is incomplete.",
         ],
-        "insights": "These fallback recommendations are shown so the answer stays useful and actionable.",
+        "insights_title": "Personalized Insight",
+        "insights": f"This is a general fallback answer path for the query: {user_query}",
+        "improvement_title": "Improvement Tips",
         "improvement_tips": [],
+        "extra_sections": [],
     }
+
+
+def normalize_answer_payload(answer_payload, query_type="general", user_query=""):
+    fallback = fallback_answer_payload(query_type=query_type, user_query=user_query)
 
     if not isinstance(answer_payload, dict):
         return fallback
@@ -873,11 +1024,31 @@ def normalize_answer_payload(answer_payload):
     if not insights:
         insights = fallback["insights"]
 
+    extra_sections = []
+    raw_extra_sections = answer_payload.get("extra_sections", fallback.get("extra_sections", []))
+    if isinstance(raw_extra_sections, list):
+        for section in raw_extra_sections[:6]:
+            if not isinstance(section, dict):
+                continue
+            title = section.get("title", "")
+            title = title.strip() if isinstance(title, str) else ""
+            items = [
+                item.strip() for item in section.get("items", [])
+                if isinstance(item, str) and item.strip()
+            ][:6]
+            if title and items:
+                extra_sections.append({"title": title, "items": items})
+
     return {
+        "primary_title": answer_payload.get("primary_title", fallback["primary_title"]),
         "recommendations": recommendations,
+        "reasons_title": answer_payload.get("reasons_title", fallback["reasons_title"]),
         "reasons": reasons,
+        "insights_title": answer_payload.get("insights_title", fallback["insights_title"]),
         "insights": insights,
-        "improvement_tips": improvement_tips,
+        "improvement_title": answer_payload.get("improvement_title", fallback["improvement_title"]),
+        "improvement_tips": improvement_tips or fallback.get("improvement_tips", []),
+        "extra_sections": extra_sections,
     }
 
 def build_chart():
@@ -910,7 +1081,7 @@ def _strip_markdown_for_pdf(value):
     return text
 
 
-def generate_pdf(query_title, report_text, web_sources, document_sources):
+def generate_pdf(query_title, report_text, web_sources, document_sources, mode_label="Web Research"):
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -956,7 +1127,7 @@ def generate_pdf(query_title, report_text, web_sources, document_sources):
     safe_query = _clean_pdf_text(query_title or "Research Brief")
     safe_date = _clean_pdf_text(datetime.now().strftime("%B %d, %Y"))
 
-    story.append(Paragraph("ORION AI Research Report", styles["Title"]))
+    story.append(Paragraph(f"ORION AI - { _clean_pdf_text(mode_label) }", styles["Title"]))
     story.append(Spacer(1, 6))
     story.append(Paragraph(f"<b>Query:</b> {safe_query}", meta_style))
     story.append(Paragraph(f"<b>Date:</b> {safe_date}", meta_style))
@@ -1228,11 +1399,24 @@ if st.button("Run Research", use_container_width=False):
             document_sources = data.get("document_sources", [])
             sources = data.get("sources", []) or (web_sources + document_sources)
             metrics = build_metrics(plan_text, final_text, sources)
-            answer_payload = normalize_answer_payload(data.get("answer_payload", {}))
+            query_type = data.get("query_type", "general")
+            mode_label = data.get("mode", "Web Research")
+            document_retrieval_failed = data.get("document_retrieval_failed", False)
+            status_message = data.get("status_message", "")
+            answer_payload = normalize_answer_payload(
+                data.get("answer_payload", {}),
+                query_type=query_type,
+                user_query=query,
+            )
+            primary_title = answer_payload["primary_title"]
             recommendations = answer_payload["recommendations"]
+            reasons_title = answer_payload["reasons_title"]
             reasons = answer_payload["reasons"]
+            insights_title = answer_payload["insights_title"]
             personalized_text = answer_payload["insights"]
+            improvement_title = answer_payload["improvement_title"]
             improvement_tips = answer_payload["improvement_tips"]
+            extra_sections = answer_payload["extra_sections"]
             quick_insights = recommendations[:5]
 
             progress.progress(100)
@@ -1283,10 +1467,11 @@ if st.button("Run Research", use_container_width=False):
             st.markdown(f"""
             <div class="summary-shell">
                 <div class="answering-line"><span>Answering:</span> {query}</div>
+                <div class="answering-line"><span>Mode:</span> {mode_label}</div>
                 <div class="summary-title">Quick Insights</div>
                 <div class="summary-grid">
                     <div class="summary-card">
-                        <div class="summary-kicker">Direct Answer</div>
+                        <div class="summary-kicker">{primary_title}</div>
                         <ul class="summary-list">
                             {insight_items}
                         </ul>
@@ -1305,28 +1490,37 @@ if st.button("Run Research", use_container_width=False):
             </div>
             """, unsafe_allow_html=True)
 
+            if document_retrieval_failed and status_message:
+                st.warning(status_message)
+
             top_recommendations_text = "\n".join(f"- {item}" for item in recommendations)
-            st.markdown("""
+            st.markdown(f"""
             <div class="top-answer-shell">
                 <div class="top-answer-kicker">Primary Output</div>
-                <div class="top-answer-title">Top Recommendations</div>
+                <div class="top-answer-title">{primary_title}</div>
             </div>
             """, unsafe_allow_html=True)
             st.markdown(top_recommendations_text)
 
-            full_report_sections = []
-            full_report_sections.append("## Why These Recommendations\n" + "\n".join(f"- {item}" for item in reasons))
-            full_report_sections.append("## Personalized Insight\n" + normalize_markdown(personalized_text))
+            with st.expander(reasons_title, expanded=False):
+                st.markdown("\n".join(f"- {item}" for item in reasons))
+
+            with st.expander(insights_title, expanded=False):
+                st.markdown(normalize_markdown(personalized_text))
+
             if improvement_tips:
-                full_report_sections.append("## Improvement Tips\n" + "\n".join(f"- {item}" for item in improvement_tips))
-            full_report_sections.append("## Key Findings\n" + (normalize_markdown(findings_text) or "_No content available._"))
-            full_report_text = "\n\n".join(full_report_sections)
+                with st.expander(improvement_title, expanded=False):
+                    st.markdown("\n".join(f"- {item}" for item in improvement_tips))
+
+            for section in extra_sections:
+                with st.expander(section["title"], expanded=False):
+                    st.markdown("\n".join(f"- {item}" for item in section["items"]))
 
             with st.expander("🧠 Research Plan", expanded=False):
                 st.markdown(normalize_markdown(plan_text) or "_No content available._")
 
-            with st.expander("Full Report", expanded=False):
-                st.markdown(full_report_text)
+            with st.expander("Key Findings", expanded=False):
+                st.markdown(normalize_markdown(findings_text) or "_No content available._")
 
             combined_sources_text = (
                 f"## Web Sources\n{normalize_markdown(web_sources_markdown) or '_No web sources available._'}\n\n"
@@ -1335,7 +1529,7 @@ if st.button("Run Research", use_container_width=False):
             with st.expander(f"Sources ({len(web_sources) + len(document_sources)})", expanded=False):
                 st.markdown(combined_sources_text)
 
-            pdf_file = generate_pdf(query, structured_response, web_sources, document_sources)
+            pdf_file = generate_pdf(query, structured_response, web_sources, document_sources, mode_label=mode_label)
             st.download_button(
                 "📄 Download Final Report (PDF)",
                 pdf_file,

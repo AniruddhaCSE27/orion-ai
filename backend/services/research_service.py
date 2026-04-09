@@ -67,6 +67,56 @@ def _query_terms(query: str):
     return [term for term in terms if term not in stopwords and len(term) > 2]
 
 
+def _mode_label(mode_key: str):
+    return {
+        "resume": "Resume Analyzer",
+        "study": "Study Mode",
+        "document": "Document Analysis",
+        "interview": "Interview Prep",
+        "web": "Web Research",
+        "general": "General Mode",
+    }.get(mode_key, "General Mode")
+
+
+def _classify_query_intent(query: str, has_indexed_documents: bool):
+    lowered = (query or "").lower()
+    resume_markers = [
+        "resume", "my profile", "my skills", "best roles", "best jobs", "career",
+        "job", "roles", "position", "fit for", "suitable roles", "career options"
+    ]
+    study_markers = [
+        "upsc", "chapter", "exam", "2 mark", "5 mark", "10 mark", "question",
+        "questions", "qs", "important topics", "short answer", "long answer",
+        "revision", "summarize this chapter", "explain this topic"
+    ]
+    interview_markers = [
+        "interview", "mock interview", "viva", "interview questions",
+        "prepare me for interview", "ask me interview questions"
+    ]
+    web_markers = [
+        "latest", "current", "today", "recent", "trends", "compare", "comparison",
+        "best tools", "news", "2026"
+    ]
+    document_markers = [
+        "this", "from this", "uploaded", "document", "pdf", "notes", "file",
+        "summarize this", "explain this", "from the document"
+    ]
+
+    if any(marker in lowered for marker in interview_markers):
+        return "interview"
+    if any(marker in lowered for marker in resume_markers):
+        return "resume"
+    if any(marker in lowered for marker in study_markers):
+        return "study"
+    if any(marker in lowered for marker in web_markers):
+        return "web"
+    if has_indexed_documents and any(marker in lowered for marker in document_markers):
+        return "document"
+    if has_indexed_documents and len(lowered.split()) <= 6 and not any(marker in lowered for marker in web_markers):
+        return "document"
+    return "general"
+
+
 def _query_relevance_score(query: str, item):
     haystack = " ".join(
         [
@@ -89,15 +139,96 @@ def _query_relevance_score(query: str, item):
     return score / max(1, len(terms))
 
 
-def _rerank_for_query(query: str, items, limit=6):
+def _mode_source_boost(mode_key: str, item, query: str):
+    source_type = item.get("source_type", "web")
+    filename = (item.get("source_filename") or "").lower()
+    title = (item.get("title") or "").lower()
+    combined_name = f"{filename} {title}"
+    lowered_query = (query or "").lower()
+    score = 0.0
+
+    if source_type == "document":
+        score += 0.5
+    if mode_key in {"study", "document"} and source_type == "document":
+        score += 2.0
+    if mode_key == "resume" and source_type == "document":
+        score += 1.5
+        if any(token in combined_name for token in ["resume", "cv", "profile"]):
+            score += 2.0
+    if mode_key == "interview" and source_type == "document":
+        score += 1.0
+        if any(token in combined_name for token in ["resume", "cv", "profile"]):
+            score += 1.0
+    if mode_key == "web" and source_type == "web":
+        score += 2.0
+    if any(token in lowered_query for token in ["latest", "current", "recent", "today"]) and source_type == "web":
+        score += 1.5
+
+    return score
+
+
+def _rerank_for_query(query: str, items, limit=6, mode_key: str = "general"):
     ranked = []
     for item in items:
-        combined_score = float(item.get("score", 0.0)) + (1.5 * _query_relevance_score(query, item))
+        combined_score = (
+            float(item.get("score", 0.0))
+            + (1.5 * _query_relevance_score(query, item))
+            + _mode_source_boost(mode_key, item, query)
+        )
         enriched = dict(item)
         enriched["query_score"] = combined_score
         ranked.append(enriched)
     ranked.sort(key=lambda item: item.get("query_score", 0.0), reverse=True)
     return ranked[:limit]
+
+
+def _prioritize_for_intent(query_type: str, items):
+    prioritized = []
+    for item in items:
+        boosted = dict(item)
+        score = float(boosted.get("query_score", boosted.get("score", 0.0)))
+        if boosted.get("source_type") == "document":
+            score += 1.0
+        if query_type in {"study", "document"} and boosted.get("source_type") == "document":
+            score += 2.0
+        if query_type == "resume" and boosted.get("source_type") == "document":
+            score += 1.5
+        if query_type == "interview" and boosted.get("source_type") == "document":
+            score += 1.0
+        if query_type == "web" and boosted.get("source_type") == "web":
+            score += 0.5
+        boosted["query_score"] = score
+        prioritized.append(boosted)
+    prioritized.sort(key=lambda item: item.get("query_score", 0.0), reverse=True)
+    return prioritized
+
+
+def _has_strong_document_match(query: str, items):
+    if not items:
+        return False
+
+    query_terms = _query_terms(query)
+    if not query_terms:
+        return bool(items)
+
+    best_score = 0.0
+    for item in items:
+        score = _query_relevance_score(query, item)
+        best_score = max(best_score, score)
+        if score >= 0.34:
+            return True
+
+    return best_score >= 0.2 and len(items) >= 2
+
+
+def _document_query_for_mode(query: str, mode_key: str, retrieval_query: str):
+    if mode_key == "resume":
+        return f"{query}\nresume profile skills projects experience"
+    if mode_key == "interview":
+        return f"{query}\ninterview questions viva project experience"
+    if mode_key in {"study", "document"}:
+        return query
+    return retrieval_query
 
 
 def _split_sources_by_type(items):
@@ -235,15 +366,26 @@ def _answer_payload_to_markdown(answer_payload):
     reasons = answer_payload.get("reasons", [])
     insights = answer_payload.get("insights", "")
     improvement_tips = answer_payload.get("improvement_tips", [])
+    primary_title = answer_payload.get("primary_title", "Direct Answer")
+    reasons_title = answer_payload.get("reasons_title", "Why This Answer")
+    insights_title = answer_payload.get("insights_title", "Insight")
+    improvement_title = answer_payload.get("improvement_title", "Improvement Tips")
+    extra_sections = answer_payload.get("extra_sections", [])
 
     sections = [
-        "## Top Recommendations\n" + "\n".join(f"- {item}" for item in recommendations),
-        "## Why These Recommendations\n" + "\n".join(f"- {item}" for item in reasons),
-        "## Personalized Insight\n" + (insights or "- These recommendations are tailored to the query as directly as possible."),
+        f"## {primary_title}\n" + "\n".join(f"- {item}" for item in recommendations),
+        f"## {reasons_title}\n" + "\n".join(f"- {item}" for item in reasons),
+        f"## {insights_title}\n" + (insights or "- This answer stays aligned to the query."),
     ]
 
     if improvement_tips:
-        sections.append("## Improvement Tips\n" + "\n".join(f"- {item}" for item in improvement_tips))
+        sections.append(f"## {improvement_title}\n" + "\n".join(f"- {item}" for item in improvement_tips))
+
+    for section in extra_sections:
+        title = section.get("title", "").strip()
+        items = section.get("items", [])
+        if title and items:
+            sections.append(f"## {title}\n" + "\n".join(f"- {item}" for item in items))
 
     return "\n\n".join(sections)
 
@@ -254,14 +396,16 @@ def _contains_report_style_language(text: str):
         "objective",
         "data collection",
         "analysis framework",
-        "analysis",
         "framework",
         "implementation plan",
     ]
     return any(phrase in lowered for phrase in banned_phrases)
 
 
-def _is_generic_response(query: str, final_report: str):
+def _is_generic_response(query: str, final_report: str, query_type: str = "general"):
+    if query_type in {"study", "document", "resume", "interview"}:
+        return False
+
     query_terms = _query_terms(query)
     report_lower = (final_report or "").lower()
     if not query_terms:
@@ -272,19 +416,165 @@ def _is_generic_response(query: str, final_report: str):
 
 
 def _fallback_answer_payload(query: str):
+    return _fallback_answer_payload_by_type(query, "general")
+
+
+def _fallback_answer_payload_by_type(query: str, query_type: str):
+    if query_type == "resume":
+        return {
+            "primary_title": "Best Roles for You",
+            "recommendations": [
+                "Product-focused software roles",
+                "Data-oriented analyst roles",
+                "Automation-focused implementation roles",
+            ],
+            "reasons_title": "Why These Roles",
+            "reasons": [
+                "These suggestions stay useful when profile context is limited but the query is still career-oriented.",
+                "They map broadly to technical, analytical, and implementation-heavy strengths.",
+                "They can be refined further once resume-specific evidence is stronger.",
+            ],
+            "insights_title": "Strengths in Your Profile",
+            "insights": "Based on general assumptions, here are the best roles.",
+            "improvement_title": "Improvement Suggestions",
+            "improvement_tips": [
+                "Add measurable impact to projects and experience bullets.",
+                "Tailor the profile to one role family at a time.",
+            ],
+            "extra_sections": [
+                {
+                    "title": "Skill Gaps",
+                    "items": [
+                        "Clarify one primary target role or stack.",
+                        "Show stronger evidence of outcomes and ownership.",
+                    ],
+                },
+                {
+                    "title": "Suggested Next Steps",
+                    "items": [
+                        "Improve the resume around one clear role direction.",
+                        "Prepare concise stories around your strongest projects.",
+                    ],
+                },
+            ],
+        }
+    if query_type == "study":
+        return {
+            "primary_title": "Chapter Summary",
+            "recommendations": [
+                "Important topics could not be extracted confidently from the uploaded study material yet.",
+                "Probable exam questions need a cleaner document index or a more specific chapter prompt.",
+                "Revision output should be retried after re-indexing the file.",
+            ],
+            "reasons_title": "Important Topics",
+            "reasons": [
+                "This appears to be a document-study query and should be answered from uploaded material first.",
+                "The current document retrieval was not strong enough to generate specific chapter-based questions safely.",
+                "A more specific prompt or re-indexed file should improve the answer quality.",
+            ],
+            "insights_title": "Revision Points",
+            "insights": "Document not properly indexed. Try re-indexing.",
+            "improvement_title": "Improvement Tips",
+            "improvement_tips": [],
+            "extra_sections": [
+                {"title": "2-mark Questions", "items": ["Please re-index the file or ask a narrower chapter question."]},
+                {"title": "5-mark Questions", "items": ["Please re-index the file or ask a narrower chapter question."]},
+                {"title": "10-mark Questions", "items": ["Please re-index the file or ask a narrower chapter question."]},
+            ],
+        }
+    if query_type == "document":
+        return {
+            "primary_title": "Summary",
+            "recommendations": [
+                "The uploaded document needs stronger indexing before a reliable summary can be generated.",
+                "The answer should be retried after re-indexing or with a more specific question.",
+                "Document-grounded questions will work best once chunk retrieval improves.",
+            ],
+            "reasons_title": "Important Topics",
+            "reasons": [
+                "This query depends on uploaded material rather than generic web context.",
+                "The current retrieval was too weak to safely claim document-specific details.",
+                "A cleaner index or narrower prompt should improve the next answer.",
+            ],
+            "insights_title": "Key Definitions / Concepts",
+            "insights": "Document not properly indexed. Try re-indexing.",
+            "improvement_title": "Improvement Tips",
+            "improvement_tips": [],
+            "extra_sections": [
+                {"title": "Probable Questions", "items": ["Please re-index the file or ask a more specific question."]},
+                {"title": "Short Answer Questions", "items": ["Please re-index the file or ask a more specific question."]},
+                {"title": "Long Answer Questions", "items": ["Please re-index the file or ask a more specific question."]},
+            ],
+        }
+    if query_type == "interview":
+        return {
+            "primary_title": "Top Interview Questions",
+            "recommendations": [
+                "Tell me about your most relevant project and your exact contribution.",
+                "What trade-offs did you make in your implementation?",
+                "How would you improve the solution if you rebuilt it today?",
+            ],
+            "reasons_title": "Focus Areas",
+            "reasons": [
+                "These questions test clarity, ownership, and technical depth.",
+                "They work as a practical fallback even when profile context is limited.",
+                "They can be expanded into a mock interview quickly.",
+            ],
+            "insights_title": "Difficulty Level",
+            "insights": "Start with foundational questions, then move into project depth and follow-up pressure questions.",
+            "improvement_title": "Follow-up Questions",
+            "improvement_tips": [
+                "How would you measure success?",
+                "What would you do differently next time?",
+            ],
+            "extra_sections": [
+                {
+                    "title": "Short Model Answers",
+                    "items": [
+                        "Use one project example with your role, action, and outcome.",
+                        "Keep answers concrete and tied to tools, decisions, and impact.",
+                    ],
+                }
+            ],
+        }
+    if query_type == "web":
+        return {
+            "primary_title": "Top Recommendations",
+            "recommendations": [
+                "Most relevant direct answer based on current web evidence",
+                "Most useful comparison point from retrieved sources",
+                "Most practical next step based on the evidence",
+            ],
+            "reasons_title": "Why These",
+            "reasons": [
+                "This is a web-oriented query, so current evidence matters more than stored document context.",
+                "The fallback stays concise and useful without drifting into unrelated recommendations.",
+                "The answer still prioritizes direct usefulness over report structure.",
+            ],
+            "insights_title": "Quick Insights",
+            "insights": f"This fallback stays aligned to the web-oriented query: {query}",
+            "improvement_title": "Improvement Tips",
+            "improvement_tips": [],
+            "extra_sections": [],
+        }
     return {
+        "primary_title": "Direct Answer",
         "recommendations": [
-            "Software Developer",
-            "Data Analyst",
-            "Machine Learning Engineer",
+            "Refine the question to target the exact decision or topic you want answered",
+            "Focus on the most relevant retrieved evidence instead of broad background",
+            "Use a narrower prompt for a more precise answer",
         ],
+        "reasons_title": "Why This Answer",
         "reasons": [
-            "These roles stay broadly aligned with technical and analytical skill paths.",
-            "They continue to show strong hiring demand across many organizations.",
-            "They provide practical entry points while keeping room for specialization.",
+            "This is a general research query rather than a career or document-specific request.",
+            "A narrower query usually improves precision and reduces generic output.",
+            "The fallback stays query-aware and avoids unrelated recommendations.",
         ],
-        "insights": f"These fallback recommendations are provided to answer the query directly: {query}",
+        "insights_title": "Personalized Insight",
+        "insights": f"This fallback path keeps the answer aligned to the general query: {query}",
+        "improvement_title": "Improvement Tips",
         "improvement_tips": [],
+        "extra_sections": [],
     }
 
 
@@ -300,38 +590,79 @@ def _has_resume_context(document_sources):
         title = (source.get("title") or "").lower()
         if any(token in f"{filename} {title}" for token in ["resume", "cv", "profile"]):
             return True
-    return bool(document_sources)
+    return False
 
 
 def run_research_pipeline(query: str):
     conversation_context = format_history_context(limit=5)
-    plan_text = plan(query, conversation_context=conversation_context)
+    document_store = VectorStore(namespace="documents")
+    has_indexed_documents = bool(document_store.documents)
+    query_type = _classify_query_intent(query, has_indexed_documents)
+    mode = _mode_label(query_type)
+    print(f"QUERY TYPE DETECTED: {query_type}")
+    print(f"MODE DETECTED: {mode}")
+    plan_text = plan(query, conversation_context=conversation_context, query_type=query_type)
     research_data = research(plan_text)
     web_store = VectorStore(namespace="web")
-    document_store = VectorStore(namespace="documents")
     documents = _build_documents(research_data)
     web_store.add_documents(documents)
 
-    web_context = web_store.similarity_search(
-        query=f"{query}\n{plan_text}",
-        top_k=4,
-    )
-    document_context = document_store.similarity_search(
-        query=f"{query}\n{plan_text}",
-        top_k=4,
-    )
-    merged_context = _merge_retrieval_results(web_context, document_context, limit=8)
-    retrieved_context = _rerank_for_query(query, merged_context, limit=6)
+    retrieval_query = f"{query}\n{plan_text}"
+    if has_indexed_documents:
+        document_query = _document_query_for_mode(query, query_type, retrieval_query)
+        document_context = document_store.similarity_search(query=document_query, top_k=8)
+        document_context = _rerank_for_query(query, document_context, limit=6, mode_key=query_type)
+        strong_document_match = _has_strong_document_match(query, document_context)
+    else:
+        document_context = []
+        strong_document_match = False
+
+    if query_type in {"study", "document"} and has_indexed_documents:
+        if strong_document_match:
+            web_context = web_store.similarity_search(query=query, top_k=2)
+            merged_context = _merge_retrieval_results(web_context, document_context, limit=8)
+        else:
+            web_context = []
+            merged_context = []
+    elif has_indexed_documents:
+        web_top_k = 6 if query_type == "web" else 4
+        web_query = query if query_type == "web" else retrieval_query
+        web_context = web_store.similarity_search(query=web_query, top_k=web_top_k)
+        merged_context = _merge_retrieval_results(web_context, document_context, limit=8)
+    else:
+        web_query = query if query_type == "web" else retrieval_query
+        web_context = web_store.similarity_search(query=web_query, top_k=6 if query_type == "web" else 4)
+        merged_context = list(web_context)
+
+    print(f"DOCUMENT CHUNKS RETRIEVED: {len(document_context)}")
+    print(f"WEB CHUNKS RETRIEVED: {len(web_context)}")
+    print(f"DOCUMENT RETRIEVAL FOUND CHUNKS: {bool(document_context)}")
+    print(f"DOCUMENT RETRIEVAL STRONG MATCH: {strong_document_match}")
+    document_retrieval_failed = bool(has_indexed_documents and query_type in {"study", "document"} and not strong_document_match)
+    print(f"DOCUMENT RETRIEVAL FAILED: {document_retrieval_failed}")
+
+    retrieved_context = _rerank_for_query(query, merged_context, limit=6, mode_key=query_type)
+    retrieved_context = _prioritize_for_intent(query_type, retrieved_context)[:6]
 
     writer_payload = dict(research_data) if isinstance(research_data, dict) else {}
     writer_payload["retrieved_context"] = retrieved_context
     writer_payload["user_query"] = query
+    writer_payload["query_type"] = query_type
+    writer_payload["has_document_context"] = bool(document_context)
+    writer_payload["strong_document_match"] = strong_document_match
+    writer_payload["mode"] = mode
 
     web_sources = _extract_sources(research_data)
     retrieved_web_sources, retrieved_document_sources = _split_sources_by_type(retrieved_context)
-    web_sources = web_sources or retrieved_web_sources
-    document_sources = retrieved_document_sources
-    writer_payload["resume_query"] = _resume_query(query)
+    if document_retrieval_failed:
+        web_sources = []
+        document_sources = []
+        retrieved_context = []
+        writer_payload["retrieved_context"] = []
+    else:
+        web_sources = retrieved_web_sources or (web_sources if query_type == "web" else web_sources[:2])
+        document_sources = retrieved_document_sources
+    writer_payload["resume_query"] = query_type == "resume"
     writer_payload["has_resume_context"] = _has_resume_context(document_sources)
 
     answer_payload = write(
@@ -339,15 +670,20 @@ def run_research_pipeline(query: str):
         writer_payload,
         conversation_context=conversation_context,
     )
+    if document_retrieval_failed:
+        answer_payload = _fallback_answer_payload_by_type(query, query_type)
+        print("FALLBACK TRIGGERED: document retrieval failed for document-based query")
     if not isinstance(answer_payload, dict):
-        answer_payload = _fallback_answer_payload(query)
+        answer_payload = _fallback_answer_payload_by_type(query, query_type)
+        print("FALLBACK TRIGGERED: writer returned non-dict payload")
     key_findings = _make_query_focused_findings(query, retrieved_context)
     web_sources_markdown = _build_sources_markdown(web_sources, source_type="web")
     document_sources_markdown = _build_sources_markdown(document_sources, source_type="document")
     final_report = _answer_payload_to_markdown(answer_payload)
-    if _contains_report_style_language(final_report) or _is_generic_response(query, final_report):
-        answer_payload = _fallback_answer_payload(query)
+    if _contains_report_style_language(final_report) or _is_generic_response(query, final_report, query_type):
+        answer_payload = _fallback_answer_payload_by_type(query, query_type)
         final_report = _answer_payload_to_markdown(answer_payload)
+        print("FALLBACK TRIGGERED: generic or report-style output detected")
     structured_response = _build_structured_response(
         plan_text,
         key_findings,
@@ -368,6 +704,11 @@ def run_research_pipeline(query: str):
         "sources": web_sources + document_sources,
         "web_sources": web_sources,
         "document_sources": document_sources,
+        "query_type": query_type,
+        "mode": mode,
+        "has_indexed_documents": has_indexed_documents,
+        "document_retrieval_failed": document_retrieval_failed,
+        "status_message": "Document not properly indexed. Try re-indexing." if document_retrieval_failed else "",
         # Compatibility keys for the current frontend.
         "research": writer_payload,
         "final": final_report,
