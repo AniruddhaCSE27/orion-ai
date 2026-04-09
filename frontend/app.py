@@ -1277,15 +1277,30 @@ if st.button("Index Documents", use_container_width=False):
             else:
                 indexed_files = index_data.get("files", [])
                 summary_lines = [
-                    f"- **{item.get('filename', 'Unknown file')}**: {item.get('chunks_indexed', 0)} chunks indexed"
+                    (
+                        f"- **{item.get('filename', 'Unknown file')}**: "
+                        f"{item.get('pages_read', 0)} pages, "
+                        f"{item.get('characters_extracted', 0)} characters, "
+                        f"{item.get('chunks_indexed', 0)} chunks indexed"
+                    )
                     for item in indexed_files
                 ]
+                total_chunks = index_data.get("document_chunks_indexed", 0)
+                failed_files = [item for item in indexed_files if item.get("chunks_indexed", 0) == 0]
+                panel_title = "Indexed Successfully" if total_chunks > 0 else "Document Indexing Failed"
+                panel_description = (
+                    "These files are now available for document retrieval."
+                    if total_chunks > 0 else
+                    "PDF uploaded, but no readable text/chunks were indexed. Try another PDF or re-index."
+                )
                 render_markdown_panel(
                     "Index Status",
-                    "Document Indexing Complete",
-                    "\n".join(summary_lines),
-                    "These files are now available for document retrieval.",
+                    panel_title,
+                    "\n".join(summary_lines) or "- No files were indexed.",
+                    panel_description,
                 )
+                if failed_files:
+                    st.warning("Document could not be read properly")
         except requests.exceptions.ConnectionError:
             st.error("Could not connect to backend for document indexing.")
         except Exception as e:

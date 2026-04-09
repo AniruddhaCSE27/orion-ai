@@ -616,8 +616,6 @@ def run_research_pipeline(query: str):
     has_indexed_documents = indexed_doc_chunks_count > 0
     document_oriented_query = _is_document_oriented_query(query)
     query_type = _classify_query_intent(query, has_indexed_documents)
-    if document_oriented_query and not has_indexed_documents and not _needs_explicit_web_mode(query):
-        query_type = "document"
     mode = _mode_label(query_type)
     has_docs = has_indexed_documents
     if has_docs and query_type == "general":
@@ -666,6 +664,7 @@ def run_research_pipeline(query: str):
     print(f"DOCUMENT RETRIEVAL STRONG MATCH: {strong_document_match}")
     document_retrieval_failed = bool(has_indexed_documents and query_type in {"study", "document"} and not strong_document_match)
     document_not_indexed = bool(document_oriented_query and not has_indexed_documents)
+    print(f"RETRIEVED DOCUMENT CHUNKS COUNT: {len(document_context)}")
     print(f"DOCUMENT RETRIEVAL FAILED: {document_retrieval_failed}")
     print(f"DOCUMENT NOT INDEXED: {document_not_indexed}")
 

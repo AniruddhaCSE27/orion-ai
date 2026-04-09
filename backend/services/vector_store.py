@@ -81,6 +81,9 @@ class VectorStore:
         self.documents.extend(documents)
         self._persist()
 
+    def count_documents(self):
+        return len(self.documents)
+
     def similarity_search(self, query: str, top_k: int = 3):
         if not query or not self.documents:
             return []

@@ -71,4 +71,5 @@ async def index_documents(request: Request):
         "success": True,
         "message": "Documents indexed successfully.",
         "files": indexed_files,
+        "document_chunks_indexed": sum(item.get("chunks_indexed", 0) for item in indexed_files),
     }
