@@ -23,6 +23,9 @@ def write(plan_text: str, research_data, conversation_context: str = ""):
                     "designed to reduce hallucinations. "
                     "Do not invent facts, citations, or unsupported claims. "
                     "Do not include a separate Sources section in your answer. "
+                    "Answer the user's exact question first, before giving supporting context. "
+                    "Avoid generic introductions and avoid drifting into broad background unless it directly helps answer the query. "
+                    "Prefer concise, relevant takeaways over long general summaries. "
                     "Follow clean markdown conventions exactly: "
                     "put a space after heading markers like '#', '##', and '###'; "
                     "put a space after numbered items like '1.' and '2.'; "
@@ -38,10 +41,13 @@ Use the plan and research data below to generate only the Final Report section.
 Ground the writing in the retrieved context when available.
 Do not add claims that are not supported by the provided materials.
 Return clean markdown only.
-Use short titled subsections when helpful.
+Start with a direct answer to the user's question.
+Use short titled subsections only when helpful.
 Keep list formatting valid and consistent.
 The retrieved context may contain both web sources and indexed document chunks.
 Prefer evidence-backed phrasing and keep the answer source-grounded and designed to reduce hallucinations.
+If the query asks for ranking, best options, recommendations, or comparisons, answer in that form directly.
+If the query is narrow, keep the response narrow.
 
 PLAN:
 {plan_text}

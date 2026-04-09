@@ -4,6 +4,7 @@ from backend.agents.writer import write
 from backend.services.memory import format_history_context, save_to_memory
 from backend.services.document_ingestion import index_document
 from backend.services.vector_store import VectorStore
+import re
 
 
 def _extract_sources(research_data):
@@ -54,6 +55,49 @@ def _merge_retrieval_results(web_results, document_results, limit=6):
     merged = list(web_results) + list(document_results)
     merged.sort(key=lambda item: item.get("score", 0.0), reverse=True)
     return merged[:limit]
+
+
+def _query_terms(query: str):
+    terms = re.findall(r"[a-zA-Z0-9]+", (query or "").lower())
+    stopwords = {
+        "the", "a", "an", "and", "or", "to", "for", "of", "in", "on", "with",
+        "give", "me", "show", "find", "analyze", "best", "what", "which", "is",
+        "are", "my", "about", "from", "that", "this", "please"
+    }
+    return [term for term in terms if term not in stopwords and len(term) > 2]
+
+
+def _query_relevance_score(query: str, item):
+    haystack = " ".join(
+        [
+            item.get("title", ""),
+            item.get("content", ""),
+            item.get("source_filename", ""),
+            item.get("text", ""),
+        ]
+    ).lower()
+    terms = _query_terms(query)
+    if not terms:
+        return 0.0
+
+    score = 0.0
+    for term in terms:
+        if term in haystack:
+            score += 1.0
+            if item.get("title", "").lower().find(term) != -1:
+                score += 0.75
+    return score / max(1, len(terms))
+
+
+def _rerank_for_query(query: str, items, limit=6):
+    ranked = []
+    for item in items:
+        combined_score = float(item.get("score", 0.0)) + (1.5 * _query_relevance_score(query, item))
+        enriched = dict(item)
+        enriched["query_score"] = combined_score
+        ranked.append(enriched)
+    ranked.sort(key=lambda item: item.get("query_score", 0.0), reverse=True)
+    return ranked[:limit]
 
 
 def _split_sources_by_type(items):
@@ -124,6 +168,34 @@ def _build_key_findings(retrieved_context, web_sources, document_sources):
     return "\n".join(fallback) if fallback else "- No source-backed findings available."
 
 
+def _make_query_focused_findings(query: str, retrieved_context):
+    query_terms = _query_terms(query)
+    findings = []
+
+    for item in retrieved_context[:5]:
+        title = item.get("title", "Untitled source")
+        content = " ".join((item.get("content") or "").split())
+        source_type = item.get("source_type", "web")
+        label = "document" if source_type == "document" else "web"
+
+        snippet = content
+        for term in query_terms:
+            idx = content.lower().find(term)
+            if idx != -1:
+                start = max(0, idx - 60)
+                end = min(len(content), idx + 140)
+                snippet = content[start:end].strip()
+                break
+
+        snippet = snippet[:180] + "..." if len(snippet) > 180 else snippet
+        if snippet:
+            findings.append(f"- **{title}** ({label}): {snippet}")
+        if len(findings) >= 5:
+            break
+
+    return "\n".join(findings) if findings else _build_key_findings(retrieved_context, web_sources, document_sources)
+
+
 def _build_sources_markdown(sources, source_type="web"):
     if not sources:
         return "- No sources available."
@@ -158,6 +230,28 @@ def _build_structured_response(plan_text, key_findings, final_report, web_source
     )
 
 
+def _is_generic_response(query: str, final_report: str):
+    query_terms = _query_terms(query)
+    report_lower = (final_report or "").lower()
+    if not query_terms:
+        return False
+
+    matches = sum(1 for term in query_terms if term in report_lower)
+    return matches < max(1, min(2, len(query_terms)))
+
+
+def _short_direct_answer(query: str, key_findings: str, final_report: str):
+    findings_lines = [line.strip() for line in (key_findings or "").splitlines() if line.strip()]
+    concise_findings = "\n".join(findings_lines[:3]) if findings_lines else "- Limited directly relevant findings were retrieved."
+    return (
+        "## Direct Answer\n"
+        f"Answering: {query}\n\n"
+        f"{concise_findings}\n\n"
+        "## Final Report\n"
+        f"{final_report}"
+    )
+
+
 def run_research_pipeline(query: str):
     conversation_context = format_history_context(limit=5)
     plan_text = plan(query, conversation_context=conversation_context)
@@ -175,7 +269,8 @@ def run_research_pipeline(query: str):
         query=f"{query}\n{plan_text}",
         top_k=4,
     )
-    retrieved_context = _merge_retrieval_results(web_context, document_context, limit=6)
+    merged_context = _merge_retrieval_results(web_context, document_context, limit=8)
+    retrieved_context = _rerank_for_query(query, merged_context, limit=6)
 
     writer_payload = dict(research_data) if isinstance(research_data, dict) else {}
     writer_payload["retrieved_context"] = retrieved_context
@@ -189,9 +284,11 @@ def run_research_pipeline(query: str):
     retrieved_web_sources, retrieved_document_sources = _split_sources_by_type(retrieved_context)
     web_sources = web_sources or retrieved_web_sources
     document_sources = retrieved_document_sources
-    key_findings = _build_key_findings(retrieved_context, web_sources, document_sources)
+    key_findings = _make_query_focused_findings(query, retrieved_context)
     web_sources_markdown = _build_sources_markdown(web_sources, source_type="web")
     document_sources_markdown = _build_sources_markdown(document_sources, source_type="document")
+    if _is_generic_response(query, final_report):
+        final_report = _short_direct_answer(query, key_findings, final_report)
     structured_response = _build_structured_response(
         plan_text,
         key_findings,

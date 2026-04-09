@@ -421,6 +421,17 @@ div[data-testid="stExpander"] details summary {
     margin-bottom: 0.5rem;
 }
 
+.answering-line {
+    color: #e7ecff;
+    font-size: 0.96rem;
+    font-weight: 600;
+    margin-bottom: 0.7rem;
+}
+
+.answering-line span {
+    color: #a5b4fc;
+}
+
 .summary-grid {
     display: grid;
     grid-template-columns: 1.6fr 0.7fr 0.7fr;
@@ -692,6 +703,24 @@ def extract_quick_insights(findings_text, final_text, limit=5):
         if len(fallback) >= limit:
             break
     return fallback
+
+
+def select_query_focused_insights(query, findings_text, final_text, limit=5):
+    query_terms = [term for term in re.findall(r"[a-zA-Z0-9]+", (query or "").lower()) if len(term) > 2]
+    candidates = extract_quick_insights(findings_text, final_text, limit=8)
+
+    if not candidates:
+        return []
+
+    scored = []
+    for item in candidates:
+        lowered = item.lower()
+        score = sum(1 for term in query_terms if term in lowered)
+        scored.append((score, len(item), item))
+
+    scored.sort(key=lambda row: (-row[0], row[1]))
+    selected = [item for _, _, item in scored[:limit]]
+    return selected[:limit]
 
 def build_chart():
     chart_data = pd.DataFrame({
@@ -1024,7 +1053,7 @@ if st.button("Run Research", use_container_width=False):
             document_sources = data.get("document_sources", [])
             sources = data.get("sources", []) or (web_sources + document_sources)
             metrics = build_metrics(plan_text, final_text, sources)
-            quick_insights = extract_quick_insights(findings_text, final_text, limit=5)
+            quick_insights = select_query_focused_insights(query, findings_text, final_text, limit=5)
 
             progress.progress(100)
 
@@ -1075,6 +1104,7 @@ if st.button("Run Research", use_container_width=False):
             )
             st.markdown(f"""
             <div class="summary-shell">
+                <div class="answering-line"><span>Answering:</span> {query}</div>
                 <div class="summary-title">Quick Insights</div>
                 <div class="summary-grid">
                     <div class="summary-card">

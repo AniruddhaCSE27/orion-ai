@@ -4,12 +4,17 @@ from backend.core.config import config
 
 client = OpenAI(api_key=config.OPENAI_API_KEY)
 
+
 def plan(query: str, conversation_context: str = ""):
-    user_prompt = f"Create a research plan for: {query}"
+    user_prompt = (
+        "Interpret the query precisely and create a focused research plan.\n\n"
+        f"USER QUERY:\n{query}"
+    )
     if conversation_context:
         user_prompt = (
             "Use the recent conversation context below when it meaningfully improves continuity.\n\n"
             f"RECENT CONTEXT:\n{conversation_context}\n\n"
+            "Interpret the current query precisely and create a focused research plan.\n\n"
             f"CURRENT QUERY:\n{query}"
         )
 
@@ -20,7 +25,13 @@ def plan(query: str, conversation_context: str = ""):
                 "role": "system",
                 "content": (
                     "You are a professional research planner. "
-                    "Create a concise, structured research plan with headings and bullet points."
+                    "Create a concise, structured plan that stays tightly aligned to the user's exact ask. "
+                    "First identify the user's intent, scope, and desired output type. "
+                    "If the user wants recommendations, rankings, comparisons, or a direct answer, reflect that explicitly. "
+                    "Avoid broad generic outlines unless the user clearly asked for broad background research. "
+                    "Return clean markdown with these sections when relevant: "
+                    "'## Intent', '## Scope', '## Desired Output', and '## Research Plan'. "
+                    "Under the plan, use short bullets focused only on information needed to answer the query."
                 )
             },
             {
