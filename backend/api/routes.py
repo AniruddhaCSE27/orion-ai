@@ -1,7 +1,11 @@
-from fastapi import APIRouter
+import importlib.util
+from pathlib import Path
+
+from fastapi import APIRouter, Request
 
 from backend.services.memory import clear_memory
-from backend.services.research_service import run_research_pipeline
+from backend.services.document_ingestion import save_uploaded_file
+from backend.services.research_service import index_document_file, run_research_pipeline
 
 router = APIRouter()
 
@@ -28,4 +32,43 @@ def clear_research_memory():
     return {
         "success": True,
         "message": "Memory cleared successfully."
+    }
+
+
+@router.post("/documents/index")
+async def index_documents(request: Request):
+    if importlib.util.find_spec("multipart") is None:
+        return {
+            "success": False,
+            "error": "Document uploads require the 'python-multipart' package."
+        }
+
+    form = await request.form()
+    files = form.getlist("files")
+    indexed_files = []
+
+    for upload in files:
+        if not getattr(upload, "filename", ""):
+            continue
+        suffix = Path(upload.filename).suffix.lower()
+        if suffix not in {".pdf", ".txt"}:
+            return {
+                "success": False,
+                "error": f"Unsupported file type: {upload.filename}"
+            }
+
+        content = await upload.read()
+        saved_path = save_uploaded_file(upload.filename, content)
+        indexed_files.append(index_document_file(saved_path))
+
+    if not indexed_files:
+        return {
+            "success": False,
+            "error": "No supported files were provided."
+        }
+
+    return {
+        "success": True,
+        "message": "Documents indexed successfully.",
+        "files": indexed_files,
     }

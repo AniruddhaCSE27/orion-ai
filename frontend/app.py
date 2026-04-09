@@ -335,14 +335,14 @@ p, li, div {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 12px;
-    margin-top: 1rem;
+    margin-top: 0.8rem;
 }
 
 .metric-box {
     background: linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.025));
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 18px;
-    padding: 1rem;
+    padding: 0.9rem 1rem;
 }
 
 .metric-label {
@@ -352,7 +352,7 @@ p, li, div {
 
 .metric-value {
     color: var(--text);
-    font-size: 1.24rem;
+    font-size: 1.15rem;
     font-weight: 700;
     margin-top: 0.12rem;
 }
@@ -364,11 +364,11 @@ p, li, div {
 }
 
 .markdown-panel {
-    margin-top: 1rem;
+    margin-top: 0.35rem;
 }
 
 .markdown-panel + .markdown-panel {
-    margin-top: 1.15rem;
+    margin-top: 0.45rem;
 }
 
 div[data-testid="stMarkdownContainer"] h1,
@@ -397,6 +397,80 @@ div[data-testid="stMarkdownContainer"] li {
 
 div[data-testid="stMarkdownContainer"] strong {
     color: #ffffff;
+}
+
+div[data-testid="stExpander"] {
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 18px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02));
+    margin-top: 0.55rem;
+    overflow: hidden;
+}
+
+div[data-testid="stExpander"] details summary {
+    padding: 0.15rem 0.3rem;
+}
+
+.summary-shell {
+    margin-top: 0.65rem;
+}
+
+.summary-title {
+    font-size: 1.02rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.summary-grid {
+    display: grid;
+    grid-template-columns: 1.6fr 0.7fr 0.7fr;
+    gap: 12px;
+}
+
+.summary-card {
+    background: linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.025));
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 18px;
+    padding: 0.95rem 1rem;
+}
+
+.summary-kicker {
+    color: #c8b7ff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 0.35rem;
+}
+
+.summary-list {
+    margin: 0;
+    padding-left: 1rem;
+    color: #dbe3f0;
+}
+
+.summary-list li {
+    margin-bottom: 0.32rem;
+}
+
+.count-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 116px;
+}
+
+.count-value {
+    font-size: 1.7rem;
+    font-weight: 800;
+    line-height: 1;
+    color: #f8fbff;
+    margin-bottom: 0.25rem;
+}
+
+.count-label {
+    color: var(--muted);
+    font-size: 0.84rem;
 }
 
 .report-section {
@@ -508,7 +582,7 @@ div[data-testid="stProgressBar"] > div > div {
 }
 
 @media (max-width: 900px) {
-    .pipeline, .metric-row, .status-grid {
+    .pipeline, .metric-row, .status-grid, .summary-grid {
         grid-template-columns: 1fr;
     }
 
@@ -539,7 +613,7 @@ def extract_sources(research_payload):
     return cleaned
 
 
-def build_sources_markdown(sources):
+def build_sources_markdown(sources, source_type="web"):
     if not sources:
         return "- No sources available."
 
@@ -547,7 +621,11 @@ def build_sources_markdown(sources):
     for source in sources:
         title = (source.get("title") or "Untitled source").strip()
         url = (source.get("url") or "").strip()
-        if url:
+        if source_type == "document":
+            filename = (source.get("source_filename") or title).strip()
+            chunk_id = source.get("chunk_id", 0)
+            lines.append(f"- **{filename}** (chunk {chunk_id})")
+        elif url:
             lines.append(f"- [{title}]({url})")
         else:
             lines.append(f"- {title}")
@@ -587,6 +665,34 @@ def build_metrics(plan_text, final_text, sources):
         "Report Words": report_len
     }
 
+
+def extract_quick_insights(findings_text, final_text, limit=5):
+    cleaned_findings = normalize_markdown(findings_text)
+    bullets = []
+    for line in cleaned_findings.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(("- ", "* ")):
+            insight = stripped[2:].strip()
+            insight = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1", insight)
+            insight = insight.replace("**", "").replace("`", "")
+            bullets.append(insight)
+        if len(bullets) >= limit:
+            break
+
+    if bullets:
+        return bullets[:limit]
+
+    fallback = []
+    cleaned_final = normalize_markdown(final_text)
+    for paragraph in cleaned_final.split("\n\n"):
+        snippet = " ".join(paragraph.split()).strip()
+        if not snippet or snippet.startswith("#"):
+            continue
+        fallback.append(snippet[:140] + "..." if len(snippet) > 140 else snippet)
+        if len(fallback) >= limit:
+            break
+    return fallback
+
 def build_chart():
     chart_data = pd.DataFrame({
         "Quality Dimension": ["Clarity", "Depth", "Usability", "Presentation"],
@@ -617,7 +723,7 @@ def _strip_markdown_for_pdf(value):
     return text
 
 
-def generate_pdf(query_title, report_text, sources):
+def generate_pdf(query_title, report_text, web_sources, document_sources):
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -678,7 +784,8 @@ def generate_pdf(query_title, report_text, sources):
         plain_line = _strip_markdown_for_pdf(line)
         safe_line = _clean_pdf_text(plain_line)
         if line.startswith("## "):
-            if plain_line[3:].strip().lower() == "sources":
+            section_name = plain_line[3:].strip().lower()
+            if section_name in {"sources", "web sources", "document sources"}:
                 skip_embedded_sources = True
                 continue
             story.append(Paragraph(safe_line[3:], section_style))
@@ -698,9 +805,9 @@ def generate_pdf(query_title, report_text, sources):
         story.append(Paragraph(safe_line, body_style))
 
     story.append(Spacer(1, 10))
-    story.append(Paragraph("Sources", section_style))
-    if sources:
-        for index, source in enumerate(sources, start=1):
+    story.append(Paragraph("Web Sources", section_style))
+    if web_sources:
+        for index, source in enumerate(web_sources, start=1):
             title = _clean_pdf_text(source.get("title", f"Source {index}"))
             url = _clean_pdf_text(source.get("url", ""))
             content = _clean_pdf_text(source.get("content", ""))
@@ -712,7 +819,22 @@ def generate_pdf(query_title, report_text, sources):
                 story.append(Paragraph(snippet, body_style))
             story.append(Spacer(1, 4))
     else:
-        story.append(Paragraph("No sources available.", body_style))
+        story.append(Paragraph("No web sources available.", body_style))
+
+    story.append(Spacer(1, 8))
+    story.append(Paragraph("Document Sources", section_style))
+    if document_sources:
+        for index, source in enumerate(document_sources, start=1):
+            filename = _clean_pdf_text(source.get("source_filename", source.get("title", f"Document {index}")))
+            chunk_id = source.get("chunk_id", 0)
+            content = _clean_pdf_text(source.get("content", ""))
+            story.append(Paragraph(f"<b>{index}. {filename}</b> (chunk {chunk_id})", body_style))
+            if content:
+                snippet = content[:260] + "..." if len(content) > 260 else content
+                story.append(Paragraph(snippet, body_style))
+            story.append(Spacer(1, 4))
+    else:
+        story.append(Paragraph("No document sources available.", body_style))
 
     doc.build(story)
     buffer.seek(0)
@@ -734,6 +856,65 @@ st.markdown("""
     <div class="search-caption">Frame your topic clearly to generate a more focused plan, stronger sources, and a sharper final report.</div>
 </div>
 """, unsafe_allow_html=True)
+
+st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+
+st.markdown("""
+<div class="card">
+    <div class="section-kicker">Knowledge Base</div>
+    <div class="section-title">Index Local Documents</div>
+    <div class="section-copy">Upload PDF or TXT files to add document-grounded retrieval alongside live web research.</div>
+</div>
+""", unsafe_allow_html=True)
+
+uploaded_files = st.file_uploader(
+    "Upload PDF or TXT files",
+    type=["pdf", "txt"],
+    accept_multiple_files=True,
+    label_visibility="collapsed",
+)
+
+if st.button("Index Documents", use_container_width=False):
+    if not uploaded_files:
+        st.warning("Please upload at least one PDF or TXT file to index.")
+    else:
+        files_payload = []
+        for uploaded_file in uploaded_files:
+            files_payload.append(
+                (
+                    "files",
+                    (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type or "application/octet-stream"),
+                )
+            )
+
+        try:
+            index_response = requests.post(
+                f"{BACKEND_URL}/documents/index",
+                files=files_payload,
+                timeout=180,
+            )
+            index_data = safe_json(index_response)
+
+            if index_response.status_code != 200 or not index_data or not index_data.get("success", False):
+                st.error(
+                    (index_data or {}).get("error", f"Failed to index documents. HTTP {index_response.status_code}")
+                )
+            else:
+                indexed_files = index_data.get("files", [])
+                summary_lines = [
+                    f"- **{item.get('filename', 'Unknown file')}**: {item.get('chunks_indexed', 0)} chunks indexed"
+                    for item in indexed_files
+                ]
+                render_markdown_panel(
+                    "Index Status",
+                    "Document Indexing Complete",
+                    "\n".join(summary_lines),
+                    "These files are now available for document retrieval.",
+                )
+        except requests.exceptions.ConnectionError:
+            st.error("Could not connect to backend for document indexing.")
+        except Exception as e:
+            st.error(f"Unexpected indexing error: {e}")
 
 st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
 
@@ -839,8 +1020,11 @@ if st.button("Run Research", use_container_width=False):
             final_text = data.get("final_report", data.get("final", ""))
             structured_response = data.get("structured_response", final_text)
             research_payload = data.get("research", {})
-            sources = data.get("sources", []) or extract_sources(research_payload)
+            web_sources = data.get("web_sources", []) or extract_sources(research_payload)
+            document_sources = data.get("document_sources", [])
+            sources = data.get("sources", []) or (web_sources + document_sources)
             metrics = build_metrics(plan_text, final_text, sources)
+            quick_insights = extract_quick_insights(findings_text, final_text, limit=5)
 
             progress.progress(100)
 
@@ -870,7 +1054,7 @@ if st.button("Run Research", use_container_width=False):
             st.markdown(f"""
             <div class="metric-row">
                 <div class="metric-box">
-                    <div class="metric-label">Sources</div>
+                    <div class="metric-label">Total Sources</div>
                     <div class="metric-value">{metrics["Sources"]}</div>
                 </div>
                 <div class="metric-box">
@@ -884,54 +1068,51 @@ if st.button("Run Research", use_container_width=False):
             </div>
             """, unsafe_allow_html=True)
 
-            col1, col2 = st.columns(2)
-
-            with col1:
-                render_markdown_panel(
-                    "Research Plan",
-                    "Research Plan",
-                    plan_text,
-                    "The planner turns the query into a scoped research path before evidence collection begins.",
-                )
-
-            with col2:
-                render_markdown_panel(
-                    "Key Findings",
-                    "Key Findings",
-                    findings_text,
-                    "Source-grounded findings are surfaced before the longer narrative report.",
-                )
-
-            render_markdown_panel(
-                "Final Report",
-                "Final Report",
-                final_text,
-                "The final report is generated from the plan, live findings, and retrieved context from the vector store.",
+            web_sources_markdown = build_sources_markdown(web_sources, source_type="web")
+            document_sources_markdown = build_sources_markdown(document_sources, source_type="document")
+            insight_items = "".join(
+                f"<li>{item}</li>" for item in (quick_insights or ["No quick insights available yet."])
             )
-
-            left, right = st.columns([0.95, 1.05], gap="large")
-
-            sources_markdown = build_sources_markdown(sources)
-
-            with left:
-                st.markdown("""
-                <div class="card">
-                    <div class="section-kicker">Quality View</div>
-                    <div class="section-title">📈 Insight Snapshot</div>
-                    <div class="section-copy">A fast visual read on how polished and presentation-ready the current output feels.</div>
+            st.markdown(f"""
+            <div class="summary-shell">
+                <div class="summary-title">Quick Insights</div>
+                <div class="summary-grid">
+                    <div class="summary-card">
+                        <div class="summary-kicker">Top Takeaways</div>
+                        <ul class="summary-list">
+                            {insight_items}
+                        </ul>
+                    </div>
+                    <div class="summary-card count-card">
+                        <div class="summary-kicker">Web Sources</div>
+                        <div class="count-value">{len(web_sources)}</div>
+                        <div class="count-label">Live references used</div>
+                    </div>
+                    <div class="summary-card count-card">
+                        <div class="summary-kicker">Document Sources</div>
+                        <div class="count-value">{len(document_sources)}</div>
+                        <div class="count-label">Indexed chunks used</div>
+                    </div>
                 </div>
-                """, unsafe_allow_html=True)
-                build_chart()
+            </div>
+            """, unsafe_allow_html=True)
 
-            with right:
-                render_markdown_panel(
-                    "Sources",
-                    "Sources",
-                    sources_markdown,
-                    "Titles and URLs used to ground the final report.",
-                )
+            with st.expander("📊 Key Findings", expanded=True):
+                st.markdown(normalize_markdown(findings_text) or "_No content available._")
 
-            pdf_file = generate_pdf(query, structured_response, sources)
+            with st.expander("🧠 Research Plan", expanded=False):
+                st.markdown(normalize_markdown(plan_text) or "_No content available._")
+
+            with st.expander("📝 Final Report", expanded=False):
+                st.markdown(normalize_markdown(final_text) or "_No content available._")
+
+            with st.expander(f"🌐 Web Sources ({len(web_sources)})", expanded=False):
+                st.markdown(normalize_markdown(web_sources_markdown) or "_No web sources available._")
+
+            with st.expander(f"📄 Document Sources ({len(document_sources)})", expanded=False):
+                st.markdown(normalize_markdown(document_sources_markdown) or "_No document sources available._")
+
+            pdf_file = generate_pdf(query, structured_response, web_sources, document_sources)
             st.download_button(
                 "📄 Download Final Report (PDF)",
                 pdf_file,

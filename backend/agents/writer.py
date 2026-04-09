@@ -40,6 +40,8 @@ Do not add claims that are not supported by the provided materials.
 Return clean markdown only.
 Use short titled subsections when helpful.
 Keep list formatting valid and consistent.
+The retrieved context may contain both web sources and indexed document chunks.
+Prefer evidence-backed phrasing and keep the answer source-grounded and designed to reduce hallucinations.
 
 PLAN:
 {plan_text}
