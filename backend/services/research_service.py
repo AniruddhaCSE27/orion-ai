@@ -72,10 +72,20 @@ def _mode_label(mode_key: str):
         "resume": "Resume Analyzer",
         "study": "Study Mode",
         "document": "Document Analysis",
+        "hybrid_document": "Document Analysis",
         "interview": "Interview Prep",
         "web": "Web Research",
         "general": "General Mode",
     }.get(mode_key, "General Mode")
+
+
+def _needs_explicit_web_mode(query: str):
+    lowered = (query or "").lower()
+    web_markers = [
+        "latest", "current", "today", "recent", "trends", "compare", "comparison",
+        "best tools", "news", "2026", "updates", "latest news", "current trends",
+    ]
+    return any(marker in lowered for marker in web_markers)
 
 
 def _classify_query_intent(query: str, has_indexed_documents: bool):
@@ -93,13 +103,10 @@ def _classify_query_intent(query: str, has_indexed_documents: bool):
         "interview", "mock interview", "viva", "interview questions",
         "prepare me for interview", "ask me interview questions"
     ]
-    web_markers = [
-        "latest", "current", "today", "recent", "trends", "compare", "comparison",
-        "best tools", "news", "2026"
-    ]
     document_markers = [
         "this", "from this", "uploaded", "document", "pdf", "notes", "file",
-        "summarize this", "explain this", "from the document"
+        "summarize this", "explain this", "from the document", "summarize the chapter",
+        "explain the chapter", "what questions", "what can come from this"
     ]
 
     if any(marker in lowered for marker in interview_markers):
@@ -108,12 +115,12 @@ def _classify_query_intent(query: str, has_indexed_documents: bool):
         return "resume"
     if any(marker in lowered for marker in study_markers):
         return "study"
-    if any(marker in lowered for marker in web_markers):
+    if _needs_explicit_web_mode(query):
         return "web"
     if has_indexed_documents and any(marker in lowered for marker in document_markers):
         return "document"
-    if has_indexed_documents and len(lowered.split()) <= 6 and not any(marker in lowered for marker in web_markers):
-        return "document"
+    if has_indexed_documents:
+        return "hybrid_document"
     return "general"
 
 
@@ -149,7 +156,7 @@ def _mode_source_boost(mode_key: str, item, query: str):
 
     if source_type == "document":
         score += 0.5
-    if mode_key in {"study", "document"} and source_type == "document":
+    if mode_key in {"study", "document", "hybrid_document"} and source_type == "document":
         score += 2.0
     if mode_key == "resume" and source_type == "document":
         score += 1.5
@@ -189,7 +196,7 @@ def _prioritize_for_intent(query_type: str, items):
         score = float(boosted.get("query_score", boosted.get("score", 0.0)))
         if boosted.get("source_type") == "document":
             score += 1.0
-        if query_type in {"study", "document"} and boosted.get("source_type") == "document":
+        if query_type in {"study", "document", "hybrid_document"} and boosted.get("source_type") == "document":
             score += 2.0
         if query_type == "resume" and boosted.get("source_type") == "document":
             score += 1.5
@@ -226,7 +233,7 @@ def _document_query_for_mode(query: str, mode_key: str, retrieval_query: str):
         return f"{query}\nresume profile skills projects experience"
     if mode_key == "interview":
         return f"{query}\ninterview questions viva project experience"
-    if mode_key in {"study", "document"}:
+    if mode_key in {"study", "document", "hybrid_document"}:
         return query
     return retrieval_query
 
@@ -359,6 +366,15 @@ def _build_structured_response(plan_text, key_findings, final_report, web_source
         "## Document Sources\n"
         f"{document_sources_markdown}"
     )
+
+
+def _is_document_oriented_query(query: str):
+    lowered = (query or "").lower()
+    markers = [
+        "summarize", "explain", "what questions", "from this", "chapter",
+        "this document", "this pdf", "notes", "uploaded file", "what can come from this",
+    ]
+    return any(marker in lowered for marker in markers)
 
 
 def _answer_payload_to_markdown(answer_payload):
@@ -596,10 +612,20 @@ def _has_resume_context(document_sources):
 def run_research_pipeline(query: str):
     conversation_context = format_history_context(limit=5)
     document_store = VectorStore(namespace="documents")
-    has_indexed_documents = bool(document_store.documents)
+    indexed_doc_chunks_count = len(document_store.documents)
+    has_indexed_documents = indexed_doc_chunks_count > 0
+    document_oriented_query = _is_document_oriented_query(query)
     query_type = _classify_query_intent(query, has_indexed_documents)
+    if document_oriented_query and not has_indexed_documents and not _needs_explicit_web_mode(query):
+        query_type = "document"
     mode = _mode_label(query_type)
+    has_docs = has_indexed_documents
+    if has_docs and query_type == "general":
+        query_type = "hybrid_document"
+        mode = _mode_label(query_type)
     print(f"QUERY TYPE DETECTED: {query_type}")
+    print(f"HAS DOCS: {has_docs}")
+    print(f"DOC CHUNKS COUNT: {indexed_doc_chunks_count}")
     print(f"MODE DETECTED: {mode}")
     plan_text = plan(query, conversation_context=conversation_context, query_type=query_type)
     research_data = research(plan_text)
@@ -625,7 +651,7 @@ def run_research_pipeline(query: str):
             web_context = []
             merged_context = []
     elif has_indexed_documents:
-        web_top_k = 6 if query_type == "web" else 4
+        web_top_k = 6 if query_type == "web" else 3
         web_query = query if query_type == "web" else retrieval_query
         web_context = web_store.similarity_search(query=web_query, top_k=web_top_k)
         merged_context = _merge_retrieval_results(web_context, document_context, limit=8)
@@ -639,7 +665,9 @@ def run_research_pipeline(query: str):
     print(f"DOCUMENT RETRIEVAL FOUND CHUNKS: {bool(document_context)}")
     print(f"DOCUMENT RETRIEVAL STRONG MATCH: {strong_document_match}")
     document_retrieval_failed = bool(has_indexed_documents and query_type in {"study", "document"} and not strong_document_match)
+    document_not_indexed = bool(document_oriented_query and not has_indexed_documents)
     print(f"DOCUMENT RETRIEVAL FAILED: {document_retrieval_failed}")
+    print(f"DOCUMENT NOT INDEXED: {document_not_indexed}")
 
     retrieved_context = _rerank_for_query(query, merged_context, limit=6, mode_key=query_type)
     retrieved_context = _prioritize_for_intent(query_type, retrieved_context)[:6]
@@ -654,7 +682,7 @@ def run_research_pipeline(query: str):
 
     web_sources = _extract_sources(research_data)
     retrieved_web_sources, retrieved_document_sources = _split_sources_by_type(retrieved_context)
-    if document_retrieval_failed:
+    if document_retrieval_failed or document_not_indexed:
         web_sources = []
         document_sources = []
         retrieved_context = []
@@ -670,9 +698,9 @@ def run_research_pipeline(query: str):
         writer_payload,
         conversation_context=conversation_context,
     )
-    if document_retrieval_failed:
+    if document_retrieval_failed or document_not_indexed:
         answer_payload = _fallback_answer_payload_by_type(query, query_type)
-        print("FALLBACK TRIGGERED: document retrieval failed for document-based query")
+        print("FALLBACK TRIGGERED: document retrieval unavailable for document-based query")
     if not isinstance(answer_payload, dict):
         answer_payload = _fallback_answer_payload_by_type(query, query_type)
         print("FALLBACK TRIGGERED: writer returned non-dict payload")
@@ -707,8 +735,16 @@ def run_research_pipeline(query: str):
         "query_type": query_type,
         "mode": mode,
         "has_indexed_documents": has_indexed_documents,
+        "doc_chunks_count": indexed_doc_chunks_count,
         "document_retrieval_failed": document_retrieval_failed,
-        "status_message": "Document not properly indexed. Try re-indexing." if document_retrieval_failed else "",
+        "document_not_indexed": document_not_indexed,
+        "status_message": (
+            "Document uploaded but not indexed. Please click 'Index Documents'."
+            if document_not_indexed else
+            "Document not properly indexed. Try re-indexing."
+            if document_retrieval_failed else
+            ""
+        ),
         # Compatibility keys for the current frontend.
         "research": writer_payload,
         "final": final_report,
