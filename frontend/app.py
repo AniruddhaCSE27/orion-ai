@@ -1,7 +1,7 @@
 import time
 from datetime import datetime
 from io import BytesIO
-from html import escape
+import re
 
 import pandas as pd
 import requests
@@ -363,6 +363,42 @@ p, li, div {
     line-height: 1.75;
 }
 
+.markdown-panel {
+    margin-top: 1rem;
+}
+
+.markdown-panel + .markdown-panel {
+    margin-top: 1.15rem;
+}
+
+div[data-testid="stMarkdownContainer"] h1,
+div[data-testid="stMarkdownContainer"] h2,
+div[data-testid="stMarkdownContainer"] h3 {
+    color: #f4f7ff;
+    letter-spacing: -0.02em;
+    margin-top: 0.2rem;
+    margin-bottom: 0.65rem;
+}
+
+div[data-testid="stMarkdownContainer"] p {
+    color: #dbe3f0;
+    line-height: 1.75;
+}
+
+div[data-testid="stMarkdownContainer"] ul,
+div[data-testid="stMarkdownContainer"] ol {
+    color: #dbe3f0;
+    padding-left: 1.25rem;
+}
+
+div[data-testid="stMarkdownContainer"] li {
+    margin-bottom: 0.38rem;
+}
+
+div[data-testid="stMarkdownContainer"] strong {
+    color: #ffffff;
+}
+
 .report-section {
     margin-top: 1rem;
     padding-top: 1rem;
@@ -502,6 +538,46 @@ def extract_sources(research_payload):
         })
     return cleaned
 
+
+def build_sources_markdown(sources):
+    if not sources:
+        return "- No sources available."
+
+    lines = []
+    for source in sources:
+        title = (source.get("title") or "Untitled source").strip()
+        url = (source.get("url") or "").strip()
+        if url:
+            lines.append(f"- [{title}]({url})")
+        else:
+            lines.append(f"- {title}")
+    return "\n".join(lines)
+
+
+def normalize_markdown(text):
+    if not text:
+        return ""
+
+    normalized_lines = []
+    for raw_line in str(text).replace("\r\n", "\n").split("\n"):
+        line = raw_line.rstrip()
+        stripped = line.lstrip()
+        indent = line[: len(line) - len(stripped)]
+
+        stripped = re.sub(r"^(#{1,6})(\S)", r"\1 \2", stripped)
+        stripped = re.sub(r"^(\d+\.)(\*\*)", r"\1 \2", stripped)
+        stripped = re.sub(r"^(\d+\.)(\S)", r"\1 \2", stripped)
+        stripped = re.sub(r"^([*-])(\S)", r"\1 \2", stripped)
+        stripped = re.sub(r"^(\d+)\.(\d+\s+\*\*)", r"\1. \2", stripped)
+        stripped = re.sub(r"\*\*(\S)", r"**\1", stripped)
+        stripped = re.sub(r"(\S)\*\*", r"\1**", stripped)
+
+        normalized_lines.append(indent + stripped)
+
+    normalized = "\n".join(normalized_lines)
+    normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+    return normalized.strip()
+
 def build_metrics(plan_text, final_text, sources):
     plan_len = len(plan_text.split()) if plan_text else 0
     report_len = len(final_text.split()) if final_text else 0
@@ -519,74 +595,26 @@ def build_chart():
     st.bar_chart(chart_data.set_index("Quality Dimension"), use_container_width=True)
 
 
-def render_rich_text(title, text):
-    lines = [line.strip() for line in (text or "").splitlines()]
-    blocks = []
-    current_title = None
-    paragraph_lines = []
-    bullets = []
-
-    def flush():
-        if not current_title and not paragraph_lines and not bullets:
-            return
-        parts = ['<div class="report-section">']
-        if current_title:
-            parts.append(f'<div class="report-heading">{escape(current_title)}</div>')
-        if paragraph_lines:
-            paragraph_html = " ".join(escape(line) for line in paragraph_lines)
-            parts.append(f'<div class="report-paragraph">{paragraph_html}</div>')
-        if bullets:
-            bullet_items = "".join(f"<li>{escape(item)}</li>" for item in bullets)
-            parts.append(f'<ul class="report-list">{bullet_items}</ul>')
-        parts.append("</div>")
-        blocks.append("".join(parts))
-
-    for line in lines:
-        if not line:
-            flush()
-            current_title = None
-            paragraph_lines = []
-            bullets = []
-            continue
-        if line.startswith("# "):
-            flush()
-            current_title = line[2:]
-            paragraph_lines = []
-            bullets = []
-            continue
-        if line.startswith("## "):
-            flush()
-            current_title = line[3:]
-            paragraph_lines = []
-            bullets = []
-            continue
-        if line.startswith(("- ", "* ")):
-            bullets.append(line[2:])
-            continue
-        if ":" in line and len(line) < 90 and not line.endswith(".") and not bullets:
-            flush()
-            current_title = line
-            paragraph_lines = []
-            bullets = []
-            continue
-        paragraph_lines.append(line)
-
-    flush()
-
-    content = "".join(blocks) if blocks else '<div class="report-paragraph">No content available.</div>'
-    st.markdown(
-        f"""
-        <div class="card">
-            <div class="section-kicker">{escape(title)}</div>
-            <div class="section-title">{escape(title)}</div>
-            <div class="report-body">{content}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+def render_markdown_panel(kicker, title, text, description=""):
+    cleaned_text = normalize_markdown(text) or "_No content available._"
+    container = st.container()
+    with container:
+        if kicker:
+            st.caption(kicker.upper())
+        st.markdown(f"### {title}")
+        if description:
+            st.caption(description)
+        st.markdown(cleaned_text)
 
 def _clean_pdf_text(value):
     return (value or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _strip_markdown_for_pdf(value):
+    text = value or ""
+    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1 - \2", text)
+    text = text.replace("**", "").replace("__", "").replace("`", "")
+    return text
 
 
 def generate_pdf(query_title, report_text, sources):
@@ -641,17 +669,24 @@ def generate_pdf(query_title, report_text, sources):
     story.append(Paragraph(f"<b>Date:</b> {safe_date}", meta_style))
     story.append(Spacer(1, 10))
 
+    skip_embedded_sources = False
     for line in report_text.split("\n"):
         line = line.strip()
         if not line:
             continue
 
-        safe_line = _clean_pdf_text(line)
+        plain_line = _strip_markdown_for_pdf(line)
+        safe_line = _clean_pdf_text(plain_line)
         if line.startswith("## "):
+            if plain_line[3:].strip().lower() == "sources":
+                skip_embedded_sources = True
+                continue
             story.append(Paragraph(safe_line[3:], section_style))
             continue
         if line.startswith("# "):
             story.append(Paragraph(safe_line[2:], section_style))
+            continue
+        if skip_embedded_sources:
             continue
         if line.startswith(("- ", "* ")):
             story.append(Paragraph(safe_line[2:], bullet_style, bulletText="•"))
@@ -800,9 +835,11 @@ if st.button("Run Research", use_container_width=False):
                 st.stop()
 
             plan_text = data.get("plan", "")
-            final_text = data.get("final", "")
+            findings_text = data.get("key_findings", data.get("findings", ""))
+            final_text = data.get("final_report", data.get("final", ""))
+            structured_response = data.get("structured_response", final_text)
             research_payload = data.get("research", {})
-            sources = extract_sources(research_payload)
+            sources = data.get("sources", []) or extract_sources(research_payload)
             metrics = build_metrics(plan_text, final_text, sources)
 
             progress.progress(100)
@@ -850,12 +887,31 @@ if st.button("Run Research", use_container_width=False):
             col1, col2 = st.columns(2)
 
             with col1:
-                render_rich_text("Planner Output", plan_text)
+                render_markdown_panel(
+                    "Research Plan",
+                    "Research Plan",
+                    plan_text,
+                    "The planner turns the query into a scoped research path before evidence collection begins.",
+                )
 
             with col2:
-                render_rich_text("Final Output", final_text)
+                render_markdown_panel(
+                    "Key Findings",
+                    "Key Findings",
+                    findings_text,
+                    "Source-grounded findings are surfaced before the longer narrative report.",
+                )
+
+            render_markdown_panel(
+                "Final Report",
+                "Final Report",
+                final_text,
+                "The final report is generated from the plan, live findings, and retrieved context from the vector store.",
+            )
 
             left, right = st.columns([0.95, 1.05], gap="large")
+
+            sources_markdown = build_sources_markdown(sources)
 
             with left:
                 st.markdown("""
@@ -868,28 +924,14 @@ if st.button("Run Research", use_container_width=False):
                 build_chart()
 
             with right:
-                st.markdown("""
-                <div class="card">
-                    <div class="section-kicker">References</div>
-                    <div class="section-title">🔗 Top Sources</div>
-                    <div class="section-copy">Primary references supporting the final report, surfaced as a cleaner source stack.</div>
-                </div>
-                """, unsafe_allow_html=True)
+                render_markdown_panel(
+                    "Sources",
+                    "Sources",
+                    sources_markdown,
+                    "Titles and URLs used to ground the final report.",
+                )
 
-                if sources:
-                    for src in sources:
-                        snippet = src["content"][:220] + "..." if src["content"] else "No snippet available."
-                        st.markdown(f"""
-                        <div class="source-card">
-                            <div class="source-title">{src["title"]}</div>
-                            <div class="source-url">{src["url"]}</div>
-                            <div class="source-snippet">{snippet}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                else:
-                    st.info("No sources available.")
-
-            pdf_file = generate_pdf(query, final_text, sources)
+            pdf_file = generate_pdf(query, structured_response, sources)
             st.download_button(
                 "📄 Download Final Report (PDF)",
                 pdf_file,
