@@ -43,8 +43,8 @@ st.markdown("""
 
 .block-container {
     max-width: 1180px;
-    padding-top: 2.4rem;
-    padding-bottom: 3rem;
+    padding-top: 2rem;
+    padding-bottom: 2.5rem;
 }
 
 #MainMenu, footer, header {
@@ -62,51 +62,53 @@ p, li, div {
 
 .hero-wrap {
     text-align: center;
-    margin-bottom: 1.8rem;
+    margin-bottom: 1.35rem;
     animation: fadeUp 0.8s ease-out;
 }
 
 .badge {
     display: inline-block;
-    padding: 0.38rem 0.78rem;
+    padding: 0.42rem 0.85rem;
     border-radius: 999px;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.07);
+    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+    border: 1px solid rgba(255,255,255,0.09);
     color: #d8dcef;
     font-size: 0.78rem;
     font-weight: 600;
-    margin-bottom: 0.9rem;
+    margin-bottom: 0.8rem;
     backdrop-filter: blur(10px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
 }
 
 .hero-title {
-    font-size: 3.6rem;
+    font-size: 3.45rem;
     font-weight: 800;
     letter-spacing: -0.04em;
-    margin-bottom: 0.65rem;
-    line-height: 1.0;
-    text-shadow: 0 12px 28px rgba(0,0,0,0.24);
+    margin-bottom: 0.5rem;
+    line-height: 0.98;
+    text-shadow: 0 14px 34px rgba(0,0,0,0.3);
 }
 
 .hero-subtitle {
-    max-width: 760px;
+    max-width: 700px;
     margin: 0 auto;
     color: var(--muted);
-    font-size: 1.08rem;
-    line-height: 1.75;
+    font-size: 1rem;
+    line-height: 1.65;
+    letter-spacing: 0.01em;
 }
 
 .search-shell {
     max-width: 860px;
-    margin: 2rem auto 1.2rem auto;
-    padding: 1.2rem 1.2rem 1rem 1.2rem;
-    border-radius: 24px;
-    background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.025));
-    border: 1px solid rgba(255,255,255,0.07);
+    margin: 1.45rem auto 0.9rem auto;
+    padding: 1.1rem 1.1rem 0.95rem 1.1rem;
+    border-radius: 26px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.025));
+    border: 1px solid rgba(255,255,255,0.08);
     box-shadow:
-        0 10px 35px rgba(0,0,0,0.25),
+        0 16px 40px rgba(0,0,0,0.22),
         inset 0 0 0 1px rgba(255,255,255,0.02);
-    backdrop-filter: blur(18px);
+    backdrop-filter: blur(20px);
     animation: fadeUp 0.9s ease-out;
 }
 
@@ -121,7 +123,7 @@ p, li, div {
 
 .search-caption {
     color: var(--muted);
-    font-size: 0.9rem;
+    font-size: 0.88rem;
     line-height: 1.5;
 }
 
@@ -144,7 +146,7 @@ p, li, div {
 }
 
 .stTextInput {
-    margin-bottom: 0.4rem;
+    margin-bottom: 0.15rem;
 }
 
 .stTextInput > div > div {
@@ -161,17 +163,24 @@ p, li, div {
 }
 
 .stTextInput > div > div > div {
-    background: rgba(13, 18, 34, 0.98) !important;
-    border: 1px solid rgba(139, 92, 246, 0.28) !important;
-    border-radius: 18px !important;
-    box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.06),
-                inset 0 1px 2px rgba(0,0,0,0.3) !important;
+    background: rgba(10, 15, 28, 0.98) !important;
+    border: 1px solid rgba(148, 163, 184, 0.16) !important;
+    border-radius: 20px !important;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.03),
+                inset 0 1px 1px rgba(255,255,255,0.02),
+                inset 0 1px 2px rgba(0,0,0,0.28) !important;
 }
 
 .stTextInput > div > div > div:focus-within {
-    border: 1px solid rgba(139, 92, 246, 0.55) !important;
-    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.12),
+    border: 1px solid rgba(96, 165, 250, 0.4) !important;
+    box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.1),
                 inset 0 1px 2px rgba(0,0,0,0.3) !important;
+}
+
+.stTextInput input {
+    font-size: 1rem !important;
+    padding-top: 0.2rem !important;
+    padding-bottom: 0.2rem !important;
 }
 
 .stTextInput input::placeholder {
@@ -183,35 +192,40 @@ p, li, div {
 .stButton {
     display: flex;
     justify-content: center;
-    margin-top: 0.55rem;
-    margin-bottom: 0.6rem;
+    margin-top: 0.45rem;
+    margin-bottom: 0.4rem;
 }
 
 .stButton > button, .stDownloadButton > button {
     background: linear-gradient(90deg, #4f46e5, #7c3aed, #0ea5e9) !important;
     color: white !important;
-    border: none !important;
+    border: 1px solid rgba(255,255,255,0.12) !important;
     border-radius: 16px !important;
-    padding: 0.82rem 1.45rem !important;
+    padding: 0.78rem 1.35rem !important;
     font-weight: 700 !important;
-    font-size: 0.95rem !important;
-    box-shadow: 0 14px 28px rgba(79,70,229,0.26) !important;
-    transition: all 0.2s ease !important;
+    font-size: 0.92rem !important;
+    letter-spacing: 0.01em !important;
+    box-shadow: 0 14px 28px rgba(79,70,229,0.24), inset 0 1px 0 rgba(255,255,255,0.14) !important;
+    transition: all 0.18s ease !important;
 }
 
 .stButton > button:hover, .stDownloadButton > button:hover {
     transform: translateY(-1px);
-    box-shadow: 0 14px 26px rgba(99,102,241,0.28) !important;
+    box-shadow: 0 16px 30px rgba(79,70,229,0.28), inset 0 1px 0 rgba(255,255,255,0.16) !important;
+}
+
+.stButton > button:active, .stDownloadButton > button:active {
+    transform: translateY(0);
 }
 
 .card {
     background: linear-gradient(180deg, var(--panel-strong), var(--panel));
-    border: 1px solid var(--border);
+    border: 1px solid rgba(255,255,255,0.085);
     border-radius: 22px;
-    padding: 1.2rem 1.2rem 1rem 1.2rem;
-    box-shadow: 0 10px 28px rgba(0,0,0,0.22);
-    backdrop-filter: blur(14px);
-    margin-top: 1rem;
+    padding: 1.05rem 1.05rem 0.95rem 1.05rem;
+    box-shadow: 0 14px 34px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.03);
+    backdrop-filter: blur(16px);
+    margin-top: 0.8rem;
     animation: fadeUp 0.55s ease-out;
 }
 
@@ -225,15 +239,15 @@ p, li, div {
 }
 
 .section-title {
-    font-size: 1.28rem;
+    font-size: 1.18rem;
     font-weight: 700;
-    margin-bottom: 0.7rem;
+    margin-bottom: 0.55rem;
 }
 
 .section-copy {
     color: var(--muted);
-    font-size: 0.94rem;
-    line-height: 1.7;
+    font-size: 0.9rem;
+    line-height: 1.58;
     margin-top: -0.15rem;
     margin-bottom: 0.2rem;
 }
@@ -246,11 +260,11 @@ p, li, div {
 }
 
 .pipe-card {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.06);
+    background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.025));
+    border: 1px solid rgba(255,255,255,0.07);
     border-radius: 18px;
-    padding: 0.9rem;
-    min-height: 132px;
+    padding: 0.85rem;
+    min-height: 118px;
 }
 
 .pipe-dot {
@@ -275,11 +289,11 @@ p, li, div {
 }
 
 .status-box {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.07);
+    background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.028));
+    border: 1px solid rgba(255,255,255,0.08);
     border-radius: 18px;
-    padding: 1.05rem 1rem;
-    margin-top: 1rem;
+    padding: 0.95rem 0.95rem;
+    margin-top: 0.75rem;
     position: relative;
     overflow: hidden;
 }
@@ -307,15 +321,15 @@ p, li, div {
 .status-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-    margin-top: 0.85rem;
+    gap: 9px;
+    margin-top: 0.75rem;
 }
 
 .status-step {
     border: 1px solid rgba(255,255,255,0.08);
-    background: rgba(255,255,255,0.03);
+    background: rgba(255,255,255,0.028);
     border-radius: 14px;
-    padding: 0.75rem 0.8rem;
+    padding: 0.68rem 0.72rem;
 }
 
 .status-step-label {
@@ -400,25 +414,31 @@ div[data-testid="stMarkdownContainer"] strong {
 }
 
 div[data-testid="stExpander"] {
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.075);
     border-radius: 18px;
-    background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02));
-    margin-top: 0.55rem;
+    background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.018));
+    margin-top: 0.45rem;
     overflow: hidden;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.14);
 }
 
 div[data-testid="stExpander"] details summary {
-    padding: 0.15rem 0.3rem;
+    padding: 0.12rem 0.28rem;
+}
+
+div[data-testid="stExpander"] summary p {
+    font-size: 0.96rem !important;
+    font-weight: 650 !important;
 }
 
 .summary-shell {
-    margin-top: 0.65rem;
+    margin-top: 0.55rem;
 }
 
 .summary-title {
-    font-size: 1.02rem;
+    font-size: 1rem;
     font-weight: 700;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.45rem;
 }
 
 .answering-line {
@@ -440,9 +460,10 @@ div[data-testid="stExpander"] details summary {
 
 .summary-card {
     background: linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.025));
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.085);
     border-radius: 18px;
-    padding: 0.95rem 1rem;
+    padding: 0.9rem 0.95rem;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
 }
 
 .summary-kicker {
@@ -461,7 +482,7 @@ div[data-testid="stExpander"] details summary {
 }
 
 .summary-list li {
-    margin-bottom: 0.32rem;
+    margin-bottom: 0.28rem;
 }
 
 .count-card {
@@ -472,7 +493,7 @@ div[data-testid="stExpander"] details summary {
 }
 
 .count-value {
-    font-size: 1.7rem;
+    font-size: 1.55rem;
     font-weight: 800;
     line-height: 1;
     color: #f8fbff;
@@ -481,7 +502,57 @@ div[data-testid="stExpander"] details summary {
 
 .count-label {
     color: var(--muted);
-    font-size: 0.84rem;
+    font-size: 0.8rem;
+}
+
+.top-answer-shell {
+    margin-top: 0.55rem;
+    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 20px;
+    padding: 1rem 1rem 0.9rem 1rem;
+    box-shadow: 0 16px 36px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+.top-answer-kicker {
+    color: #c8b7ff;
+    font-size: 0.73rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 0.35rem;
+}
+
+.top-answer-title {
+    font-size: 1.28rem;
+    font-weight: 750;
+    margin-bottom: 0.35rem;
+}
+
+.upload-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 0.55rem;
+    margin-bottom: 0.2rem;
+}
+
+.upload-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0.42rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.025));
+    color: #dce4f5;
+    font-size: 0.8rem;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+}
+
+.upload-chip-size {
+    color: #96a0b5;
+    font-size: 0.75rem;
 }
 
 .report-section {
@@ -722,6 +793,44 @@ def select_query_focused_insights(query, findings_text, final_text, limit=5):
     selected = [item for _, _, item in scored[:limit]]
     return selected[:limit]
 
+
+def extract_section(markdown_text, section_name):
+    if not markdown_text:
+        return ""
+
+    lines = markdown_text.splitlines()
+    collected = []
+    inside = False
+    target = section_name.strip().lower()
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            heading = stripped[3:].strip().lower()
+            if inside and heading != target:
+                break
+            inside = heading == target
+            continue
+        if inside:
+            collected.append(line)
+
+    return "\n".join(collected).strip()
+
+
+def extract_direct_answer_bullets(final_text, limit=5):
+    direct_answer = normalize_markdown(extract_section(final_text, "Top Recommendations"))
+    bullets = []
+    for line in direct_answer.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(("- ", "* ")):
+            item = stripped[2:].strip()
+            item = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1", item)
+            item = item.replace("**", "").replace("`", "")
+            bullets.append(item)
+        if len(bullets) >= limit:
+            break
+    return bullets[:limit]
+
 def build_chart():
     chart_data = pd.DataFrame({
         "Quality Dimension": ["Clarity", "Depth", "Usability", "Presentation"],
@@ -903,6 +1012,23 @@ uploaded_files = st.file_uploader(
     label_visibility="collapsed",
 )
 
+if uploaded_files:
+    upload_chips = []
+    for uploaded_file in uploaded_files:
+        size_kb = max(1, int(len(uploaded_file.getvalue()) / 1024))
+        upload_chips.append(
+            f"""
+            <div class="upload-chip">
+                <span>{uploaded_file.name}</span>
+                <span class="upload-chip-size">{size_kb} KB</span>
+            </div>
+            """
+        )
+    st.markdown(
+        f'<div class="upload-chip-row">{"".join(upload_chips)}</div>',
+        unsafe_allow_html=True,
+    )
+
 if st.button("Index Documents", use_container_width=False):
     if not uploaded_files:
         st.warning("Please upload at least one PDF or TXT file to index.")
@@ -1053,7 +1179,11 @@ if st.button("Run Research", use_container_width=False):
             document_sources = data.get("document_sources", [])
             sources = data.get("sources", []) or (web_sources + document_sources)
             metrics = build_metrics(plan_text, final_text, sources)
-            quick_insights = select_query_focused_insights(query, findings_text, final_text, limit=5)
+            direct_answer_text = extract_section(final_text, "Top Recommendations")
+            why_best_text = extract_section(final_text, "Why These Recommendations")
+            personalized_text = extract_section(final_text, "Personalized Insight")
+            improvements_text = extract_section(final_text, "Improvement Tips")
+            quick_insights = extract_direct_answer_bullets(final_text, limit=5)
 
             progress.progress(100)
 
@@ -1061,7 +1191,7 @@ if st.button("Run Research", use_container_width=False):
             <div class="status-box">
                 <div class="status-title">Live Status</div>
                 <div class="status-main">✅ Research completed successfully</div>
-                <div class="status-sub">ORION turned your brief into a structured report with source-backed output.</div>
+                <div class="status-sub">ORION generated a source-grounded answer with supporting context and export-ready output.</div>
                 <div class="status-grid">
                     <div class="status-step">
                         <div class="status-step-label">Plan</div>
@@ -1100,7 +1230,7 @@ if st.button("Run Research", use_container_width=False):
             web_sources_markdown = build_sources_markdown(web_sources, source_type="web")
             document_sources_markdown = build_sources_markdown(document_sources, source_type="document")
             insight_items = "".join(
-                f"<li>{item}</li>" for item in (quick_insights or ["No quick insights available yet."])
+                f"<li>{item}</li>" for item in (quick_insights or ["No direct answer bullets available yet."])
             )
             st.markdown(f"""
             <div class="summary-shell">
@@ -1108,7 +1238,7 @@ if st.button("Run Research", use_container_width=False):
                 <div class="summary-title">Quick Insights</div>
                 <div class="summary-grid">
                     <div class="summary-card">
-                        <div class="summary-kicker">Top Takeaways</div>
+                        <div class="summary-kicker">Direct Answer</div>
                         <ul class="summary-list">
                             {insight_items}
                         </ul>
@@ -1127,20 +1257,37 @@ if st.button("Run Research", use_container_width=False):
             </div>
             """, unsafe_allow_html=True)
 
-            with st.expander("📊 Key Findings", expanded=True):
-                st.markdown(normalize_markdown(findings_text) or "_No content available._")
+            top_recommendations_text = normalize_markdown(direct_answer_text) or "_No top recommendations available._"
+            st.markdown("""
+            <div class="top-answer-shell">
+                <div class="top-answer-kicker">Primary Output</div>
+                <div class="top-answer-title">Top Recommendations</div>
+            </div>
+            """, unsafe_allow_html=True)
+            st.markdown(top_recommendations_text)
+
+            full_report_sections = []
+            if why_best_text.strip():
+                full_report_sections.append("## Why These Recommendations\n" + normalize_markdown(why_best_text))
+            if personalized_text.strip():
+                full_report_sections.append("## Personalized Insight\n" + normalize_markdown(personalized_text))
+            if improvements_text.strip():
+                full_report_sections.append("## Improvement Tips\n" + normalize_markdown(improvements_text))
+            full_report_sections.append("## Key Findings\n" + (normalize_markdown(findings_text) or "_No content available._"))
+            full_report_text = "\n\n".join(full_report_sections)
 
             with st.expander("🧠 Research Plan", expanded=False):
                 st.markdown(normalize_markdown(plan_text) or "_No content available._")
 
-            with st.expander("📝 Final Report", expanded=False):
-                st.markdown(normalize_markdown(final_text) or "_No content available._")
+            with st.expander("Full Report", expanded=False):
+                st.markdown(full_report_text)
 
-            with st.expander(f"🌐 Web Sources ({len(web_sources)})", expanded=False):
-                st.markdown(normalize_markdown(web_sources_markdown) or "_No web sources available._")
-
-            with st.expander(f"📄 Document Sources ({len(document_sources)})", expanded=False):
-                st.markdown(normalize_markdown(document_sources_markdown) or "_No document sources available._")
+            combined_sources_text = (
+                f"## Web Sources\n{normalize_markdown(web_sources_markdown) or '_No web sources available._'}\n\n"
+                f"## Document Sources\n{normalize_markdown(document_sources_markdown) or '_No document sources available._'}"
+            )
+            with st.expander(f"Sources ({len(web_sources) + len(document_sources)})", expanded=False):
+                st.markdown(combined_sources_text)
 
             pdf_file = generate_pdf(query, structured_response, web_sources, document_sources)
             st.download_button(

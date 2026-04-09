@@ -193,7 +193,7 @@ def _make_query_focused_findings(query: str, retrieved_context):
         if len(findings) >= 5:
             break
 
-    return "\n".join(findings) if findings else _build_key_findings(retrieved_context, web_sources, document_sources)
+    return "\n".join(findings) if findings else "- No tightly matched findings were retrieved."
 
 
 def _build_sources_markdown(sources, source_type="web"):
@@ -230,6 +230,19 @@ def _build_structured_response(plan_text, key_findings, final_report, web_source
     )
 
 
+def _contains_report_style_language(text: str):
+    lowered = (text or "").lower()
+    banned_phrases = [
+        "objective",
+        "data collection",
+        "analysis framework",
+        "analysis",
+        "framework",
+        "implementation plan",
+    ]
+    return any(phrase in lowered for phrase in banned_phrases)
+
+
 def _is_generic_response(query: str, final_report: str):
     query_terms = _query_terms(query)
     report_lower = (final_report or "").lower()
@@ -244,12 +257,28 @@ def _short_direct_answer(query: str, key_findings: str, final_report: str):
     findings_lines = [line.strip() for line in (key_findings or "").splitlines() if line.strip()]
     concise_findings = "\n".join(findings_lines[:3]) if findings_lines else "- Limited directly relevant findings were retrieved."
     return (
-        "## Direct Answer\n"
-        f"Answering: {query}\n\n"
+        "## Top Recommendations\n"
         f"{concise_findings}\n\n"
-        "## Final Report\n"
-        f"{final_report}"
+        "## Why These Recommendations\n"
+        "- These options were prioritized because they align most closely with the user query and retrieved evidence.\n\n"
+        "## Personalized Insight\n"
+        f"- Answering: {query}"
     )
+
+
+def _resume_query(query: str):
+    lowered = (query or "").lower()
+    triggers = ["resume", "my profile", "my skills"]
+    return any(trigger in lowered for trigger in triggers)
+
+
+def _has_resume_context(document_sources):
+    for source in document_sources:
+        filename = (source.get("source_filename") or "").lower()
+        title = (source.get("title") or "").lower()
+        if any(token in f"{filename} {title}" for token in ["resume", "cv", "profile"]):
+            return True
+    return bool(document_sources)
 
 
 def run_research_pipeline(query: str):
@@ -274,20 +303,24 @@ def run_research_pipeline(query: str):
 
     writer_payload = dict(research_data) if isinstance(research_data, dict) else {}
     writer_payload["retrieved_context"] = retrieved_context
+    writer_payload["user_query"] = query
+
+    web_sources = _extract_sources(research_data)
+    retrieved_web_sources, retrieved_document_sources = _split_sources_by_type(retrieved_context)
+    web_sources = web_sources or retrieved_web_sources
+    document_sources = retrieved_document_sources
+    writer_payload["resume_query"] = _resume_query(query)
+    writer_payload["has_resume_context"] = _has_resume_context(document_sources)
 
     final_report = write(
         plan_text,
         writer_payload,
         conversation_context=conversation_context,
     )
-    web_sources = _extract_sources(research_data)
-    retrieved_web_sources, retrieved_document_sources = _split_sources_by_type(retrieved_context)
-    web_sources = web_sources or retrieved_web_sources
-    document_sources = retrieved_document_sources
     key_findings = _make_query_focused_findings(query, retrieved_context)
     web_sources_markdown = _build_sources_markdown(web_sources, source_type="web")
     document_sources_markdown = _build_sources_markdown(document_sources, source_type="document")
-    if _is_generic_response(query, final_report):
+    if _contains_report_style_language(final_report) or _is_generic_response(query, final_report):
         final_report = _short_direct_answer(query, key_findings, final_report)
     structured_response = _build_structured_response(
         plan_text,
