@@ -11,166 +11,117 @@ client = OpenAI(api_key=config.OPENAI_API_KEY)
 def _mode_defaults(mode_key: str, user_query: str, has_resume_context: bool):
     if mode_key == "resume":
         insights = (
-            "Based on general assumptions, here are the best roles."
-            if not has_resume_context
-            else f"These role suggestions stay tied to the profile-oriented query: {user_query}"
+            "These role suggestions combine the current query, recent chat memory, and live market-facing web evidence."
+            if has_resume_context
+            else "These role suggestions stay practical even when profile context is still limited."
         )
         return {
-            "primary_title": "Best Roles for You",
+            "primary_title": "Top Recommendations",
             "recommendations": [
-                "Product-focused software roles",
-                "Data-heavy analyst roles",
-                "Automation and AI-assisted implementation roles",
+                "Prioritize roles that match your strongest technical evidence and the market demand visible in the retrieved sources.",
+                "Lead with measurable projects, tools used, and outcomes instead of generic skills-only claims.",
+                "Refine your positioning toward one or two role families before applying broadly.",
             ],
-            "reasons_title": "Why These Roles",
+            "reasons_title": "Why This Answer",
             "reasons": [
-                "They align broadly with technical problem-solving, project work, and transferable digital skills.",
-                "They offer practical entry paths while leaving room to specialize later.",
-                "They stay useful even when resume context is limited or incomplete.",
+                "Resume analysis works best when profile clues are combined with current role expectations from the web.",
+                "The answer is optimized for role fit, credibility, and practical next steps.",
+                "It stays useful for follow-up questions about strengths, gaps, and targeting strategy.",
             ],
-            "insights_title": "Strengths in Your Profile",
+            "insights_title": "Key Insights",
             "insights": insights,
-            "improvement_title": "Improvement Suggestions",
+            "improvement_title": "Improvement Tips",
             "improvement_tips": [
-                "Add measurable project impact and concrete tools used.",
-                "Highlight the strongest domain or role focus more clearly.",
+                "Add metrics, impact, and ownership to your best projects.",
+                "Tailor your headline and summary to the exact roles you want next.",
             ],
             "extra_sections": [
-                {
-                    "title": "Skill Gaps",
-                    "items": [
-                        "Clarify depth in one target stack or domain.",
-                        "Show stronger evidence of impact, ownership, or outcomes.",
-                    ],
-                },
                 {
                     "title": "Suggested Next Steps",
                     "items": [
-                        "Tailor the resume to one role family at a time.",
-                        "Prepare 2 to 3 project stories with outcomes and metrics.",
-                    ],
-                },
-            ],
-        }
-
-    if mode_key == "study":
-        return {
-            "primary_title": "Chapter Summary",
-            "recommendations": [
-                "Main ideas and high-priority subtopics from the material",
-                "Probable exam-style questions based on the strongest chunks",
-                "Fast revision points to review before practice",
-            ],
-            "reasons_title": "Important Topics",
-            "reasons": [
-                "These points are chosen from the most relevant study-oriented document chunks.",
-                "They are the areas most likely to produce direct short-answer or long-answer questions.",
-                "The output stays concise so it is useful for revision, not just reading.",
-            ],
-            "insights_title": "Revision Points",
-            "insights": "Focus first on concepts, definitions, and repeated themes that appear across the retrieved chapter content.",
-            "improvement_title": "Improvement Tips",
-            "improvement_tips": [],
-            "extra_sections": [
-                {"title": "2-mark Questions", "items": ["Document not properly indexed. Try re-indexing."]},
-                {"title": "5-mark Questions", "items": ["Document not properly indexed. Try re-indexing."]},
-                {"title": "10-mark Questions", "items": ["Document not properly indexed. Try re-indexing."]},
-            ],
-        }
-
-    if mode_key == "document":
-        return {
-            "primary_title": "Summary",
-            "recommendations": [
-                "Core points extracted from the uploaded material",
-                "Most relevant supporting details tied to the query",
-                "A concise next step for deeper review or questioning",
-            ],
-            "reasons_title": "Important Topics",
-            "reasons": [
-                "The answer is grounded in uploaded content before external sources.",
-                "The selected points are ranked by closeness to the exact question.",
-                "The output is designed to stay practical and easy to scan.",
-            ],
-            "insights_title": "Key Definitions / Concepts",
-            "insights": "Document not properly indexed. Try re-indexing.",
-            "improvement_title": "Improvement Tips",
-            "improvement_tips": [],
-            "extra_sections": [
-                {"title": "Probable Questions", "items": ["Document not properly indexed. Try re-indexing."]},
-                {"title": "Short Answer Questions", "items": ["Document not properly indexed. Try re-indexing."]},
-                {"title": "Long Answer Questions", "items": ["Document not properly indexed. Try re-indexing."]},
-            ],
-        }
-
-    if mode_key == "interview":
-        return {
-            "primary_title": "Top Interview Questions",
-            "recommendations": [
-                "Tell me about yourself and your most relevant project.",
-                "What technical decisions did you make, and why?",
-                "Where would you improve your approach if you repeated the work today?",
-            ],
-            "reasons_title": "Focus Areas",
-            "reasons": [
-                "These questions test understanding, ownership, and communication.",
-                "They are useful even when resume or document context is limited.",
-                "They can be expanded into a mock interview quickly.",
-            ],
-            "insights_title": "Difficulty Level",
-            "insights": "Start with foundational questions, then move into project depth and follow-ups.",
-            "improvement_title": "Follow-up Questions",
-            "improvement_tips": [
-                "What trade-offs did you face?",
-                "How would you measure success?",
-            ],
-            "extra_sections": [
-                {
-                    "title": "Short Model Answers",
-                    "items": [
-                        "Use one concise project example with your role, action, and outcome.",
-                        "Keep answers specific and tied to tools, decisions, and impact.",
+                        "Sharpen one primary role narrative before sending applications.",
+                        "Prepare concise examples that prove technical judgment and results.",
                     ],
                 }
             ],
         }
 
-    if mode_key == "web":
+    if mode_key == "study":
         return {
             "primary_title": "Top Recommendations",
             "recommendations": [
-                "Most relevant direct answer based on current web-backed evidence",
-                "Strongest supporting comparison or takeaway",
-                "Most practical next step based on the evidence",
+                "Start with the core definition, scope, and why the topic matters before memorizing details.",
+                "Focus on recurring concepts, likely exam angles, and cause-effect relationships from the retrieved sources.",
+                "Turn the answer into short revision bullets and one or two probable questions for recall practice.",
             ],
-            "reasons_title": "Why These",
+            "reasons_title": "Why This Answer",
             "reasons": [
-                "The answer is prioritized using web sources for current or comparative queries.",
-                "Only the most query-relevant evidence is surfaced in the top section.",
-                "The output stays concise instead of expanding into a generic report.",
+                "Study Mode is optimized for teaching clarity, retention, and exam usefulness.",
+                "The answer is grounded in web evidence and then compressed into revision-friendly points.",
+                "It supports follow-up questions such as summaries, explanations, and probable questions.",
             ],
-            "insights_title": "Quick Insights",
-            "insights": f"This answer is optimized for the web-oriented query: {user_query}",
+            "insights_title": "Key Insights",
+            "insights": "Use the quick bullets first, then ask follow-up questions on any weak concept for deeper understanding.",
             "improvement_title": "Improvement Tips",
             "improvement_tips": [],
-            "extra_sections": [],
+            "extra_sections": [
+                {
+                    "title": "Revision Focus",
+                    "items": [
+                        "Memorize definitions, classifications, and high-frequency examples.",
+                        "Practice one short-answer and one long-answer explanation from the topic.",
+                    ],
+                }
+            ],
+        }
+
+    if mode_key == "interview":
+        return {
+            "primary_title": "Top Recommendations",
+            "recommendations": [
+                "Prepare a concise answer for the most likely role-specific question first.",
+                "Back each answer with one concrete project, decision, or trade-off you personally handled.",
+                "Practice follow-up responses that show ownership, judgment, and measurable impact.",
+            ],
+            "reasons_title": "Why This Answer",
+            "reasons": [
+                "Interview Prep is optimized for question quality, answer depth, and follow-up readiness.",
+                "The answer stays practical instead of becoming a generic theory dump.",
+                "It works well for iterative mock-interview style follow-ups in chat.",
+            ],
+            "insights_title": "Key Insights",
+            "insights": "Strong interview answers usually combine context, your decision, the trade-off, and the outcome in one compact story.",
+            "improvement_title": "Improvement Tips",
+            "improvement_tips": [
+                "Keep answers specific instead of broad or textbook-like.",
+                "Prepare one stronger example for system design, collaboration, and debugging.",
+            ],
+            "extra_sections": [
+                {
+                    "title": "Follow-up Questions",
+                    "items": [
+                        "What trade-offs did you make and why?",
+                        "How would you improve the solution today?",
+                    ],
+                }
+            ],
         }
 
     return {
-        "primary_title": "Direct Answer",
+        "primary_title": "Top Recommendations",
         "recommendations": [
-            "Most relevant answer point based on the available evidence",
-            "Most useful supporting point tied to the query",
-            "Most practical follow-up direction",
+            "Lead with the direct answer and the strongest evidence-backed takeaway.",
+            "Use the highest-relevance sources to compare options or validate the recommendation.",
+            "End with the most practical next step based on the retrieved evidence.",
         ],
         "reasons_title": "Why This Answer",
         "reasons": [
-            "The answer is kept aligned to the exact query rather than broad background.",
-            "Retrieved evidence is ranked by relevance before writing.",
-            "Fallback stays useful without drifting into unrelated recommendations.",
+            "The answer is ranked around query relevance instead of broad background information.",
+            "Only source-grounded claims should be surfaced in the top section.",
+            "The structure is designed for fast reading and multi-turn follow-up."
         ],
-        "insights_title": "Personalized Insight",
-        "insights": f"This response stays aligned to the general query: {user_query}",
+        "insights_title": "Key Insights",
+        "insights": f"This answer is optimized for the current web-grounded query: {user_query}",
         "improvement_title": "Improvement Tips",
         "improvement_tips": [],
         "extra_sections": [],
@@ -271,36 +222,26 @@ def write(plan_text: str, research_data, conversation_context: str = ""):
         context_block = f"\nRECENT CONVERSATION CONTEXT:\n{conversation_context}\n"
 
     user_query = research_data.get("user_query", "")
-    mode_key = research_data.get("query_type", "general")
-    mode_label = research_data.get("mode", "General Mode")
+    mode_key = research_data.get("query_type", "web")
+    mode_label = research_data.get("mode", "Web Research")
     has_resume_context = research_data.get("has_resume_context", False)
-    has_document_context = research_data.get("has_document_context", False)
-    strong_document_match = research_data.get("strong_document_match", False)
 
     mode_guidance = {
         "resume": (
-            "Produce resume-coach style output with sections such as Best Roles for You, Why These Roles, "
-            "Strengths in Your Profile, Skill Gaps, Improvement Suggestions, and Suggested Next Steps."
+            "Produce resume-analyzer output with Top Recommendations, Why This Answer, Key Insights, "
+            "Improvement Tips, and concise next steps."
         ),
         "study": (
-            "Produce study-assistant output with Chapter Summary, Important Topics, 2-mark Questions, "
-            "5-mark Questions, 10-mark Questions, and Revision Points."
-        ),
-        "document": (
-            "Produce document-analysis output with Summary, Important Topics, Probable Questions, "
-            "Short Answer Questions, Long Answer Questions, and Key Definitions / Concepts."
+            "Produce study-assistant output with concise teaching points, practical revision help, "
+            "and exam-useful framing."
         ),
         "interview": (
-            "Produce interview-prep output with Top Interview Questions, Short Model Answers, "
-            "Difficulty Level, Focus Areas, and Follow-up Questions."
+            "Produce interview-prep output with likely questions, answer angles, and follow-up pressure points."
         ),
         "web": (
-            "Produce web-research output with Top Recommendations, Why These, and Quick Insights."
+            "Produce web-research output with direct recommendations, concise reasoning, and source-grounded insights."
         ),
-        "general": (
-            "Produce a concise direct answer with supporting reasons and practical next steps."
-        ),
-    }.get(mode_key, "Produce a concise direct answer.")
+    }.get(mode_key, "Produce web-research output with direct recommendations and practical next steps.")
 
     response = client.chat.completions.create(
         model=config.MODEL_NAME,
@@ -321,8 +262,8 @@ def write(plan_text: str, research_data, conversation_context: str = ""):
                     "recommendations must contain 3 to 5 non-empty bullets. "
                     "reasons must contain 2 to 5 non-empty bullets. "
                     "insights must be a short useful paragraph or sentence. "
-                    "extra_sections should be used for mode-specific sections."
-                )
+                    "extra_sections should be used only when they materially help the mode."
+                ),
             },
             {
                 "role": "user",
@@ -333,11 +274,11 @@ Mode guidance: {mode_guidance}
 
 Rules:
 - Answer the exact user query, not a generic topic.
-- Keep output practical and recruiter-grade or exam-useful where relevant.
-- If uploaded document context is strong, prefer it first.
-- If the query is current/latest, web evidence can lead.
-- If context is weak, produce a mode-aware fallback only.
+- Keep output practical and concise.
+- Use the retrieved evidence and recent memory where relevant.
+- If the query is current/latest, prioritize current web evidence.
 - Do not use the words objective, framework, analysis framework, or data collection as sections.
+- Keep the structure answer-first and follow-up friendly.
 
 USER QUERY:
 {user_query}
@@ -348,13 +289,9 @@ PLAN:
 
 RESEARCH DATA:
 {research_data}
-
-DOCUMENT CONTEXT STATUS:
-- has_document_context: {has_document_context}
-- strong_document_match: {strong_document_match}
-"""
-            }
-        ]
+""",
+            },
+        ],
     )
 
     writer_response = response.choices[0].message.content

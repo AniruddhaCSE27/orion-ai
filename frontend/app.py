@@ -529,32 +529,6 @@ div[data-testid="stExpander"] summary p {
     margin-bottom: 0.35rem;
 }
 
-.upload-chip-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 0.55rem;
-    margin-bottom: 0.2rem;
-}
-
-.upload-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 0.42rem 0.7rem;
-    border-radius: 999px;
-    border: 1px solid rgba(255,255,255,0.08);
-    background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.025));
-    color: #dce4f5;
-    font-size: 0.8rem;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
-}
-
-.upload-chip-size {
-    color: #96a0b5;
-    font-size: 0.75rem;
-}
-
 .report-section {
     margin-top: 1rem;
     padding-top: 1rem;
@@ -719,11 +693,7 @@ def build_sources_markdown(sources, source_type="web"):
     for source in sources:
         title = (source.get("title") or "Untitled source").strip()
         url = (source.get("url") or "").strip()
-        if source_type == "document":
-            filename = (source.get("source_filename") or title).strip()
-            chunk_id = source.get("chunk_id", 0)
-            lines.append(f"- **{filename}** (chunk {chunk_id})")
-        elif url:
+        if url:
             lines.append(f"- [{title}]({url})")
         else:
             lines.append(f"- {title}")
@@ -848,41 +818,34 @@ def extract_direct_answer_bullets(final_text, limit=5):
     return bullets[:limit]
 
 
-def fallback_answer_payload(query_type="general", user_query=""):
+def fallback_answer_payload(query_type="web", user_query=""):
     if query_type == "resume":
         return {
-            "primary_title": "Best Roles for You",
+            "primary_title": "Top Recommendations",
             "recommendations": [
-                "Product-focused software roles",
-                "Data-oriented analyst roles",
-                "Automation-focused implementation roles",
+                "Target roles that match your strongest evidence and the strongest market demand visible in the retrieved sources.",
+                "Emphasize measurable projects, technical depth, and outcomes instead of generic skill listings.",
+                "Use follow-up prompts to refine best-fit roles, resume bullets, or gap analysis.",
             ],
-            "reasons_title": "Why These Roles",
+            "reasons_title": "Why This Answer",
             "reasons": [
-                "These suggestions stay useful when resume context is limited but the query is still career-oriented.",
-                "They map broadly to technical, analytical, and implementation-heavy strengths.",
-                "They can be refined further once profile-specific evidence is stronger.",
+                "Resume Analyzer combines role-fit reasoning with web-grounded market context.",
+                "It stays useful even when the profile context is only partially available.",
+                "The next best step is usually tighter positioning and clearer evidence of impact.",
             ],
-            "insights_title": "Strengths in Your Profile",
-            "insights": "Based on general assumptions, here are the best roles.",
+            "insights_title": "Key Insights",
+            "insights": "Use follow-up questions to drill into best roles, missing skills, or stronger resume bullets.",
             "improvement_title": "Improvement Suggestions",
             "improvement_tips": [
-                "Add measurable project outcomes and tools used.",
-                "Tailor the profile toward one role family at a time.",
+                "Add metrics and ownership to key project bullets.",
+                "Align the resume summary to one target role family.",
             ],
             "extra_sections": [
                 {
-                    "title": "Skill Gaps",
-                    "items": [
-                        "Clarify one primary target role or stack.",
-                        "Show stronger evidence of ownership and impact.",
-                    ],
-                },
-                {
                     "title": "Suggested Next Steps",
                     "items": [
-                        "Prepare project stories with outcome-focused details.",
-                        "Refine the resume around one specific role direction.",
+                        "Sharpen one primary role narrative before sending applications.",
+                        "Prepare concise examples that prove technical judgment and results.",
                     ],
                 },
             ],
@@ -890,81 +853,60 @@ def fallback_answer_payload(query_type="general", user_query=""):
 
     if query_type == "study":
         return {
-            "primary_title": "Chapter Summary",
+            "primary_title": "Top Recommendations",
             "recommendations": [
-                "Important topics could not be extracted confidently from the uploaded study material yet.",
-                "Probable exam questions need a cleaner document index or a more specific chapter prompt.",
-                "Revision output should be retried after re-indexing the file.",
+                "Start with the core concept and scope before memorizing details.",
+                "Focus on likely exam angles, repeated themes, and cause-effect relationships.",
+                "Ask a follow-up to turn this topic into short answers, long answers, or revision notes.",
             ],
-            "reasons_title": "Important Topics",
+            "reasons_title": "Why This Answer",
             "reasons": [
-                "This looks like a document-study query, so the answer should come from uploaded material first.",
-                "The current response did not contain enough strong document-grounded output to safely show chapter-specific details.",
-                "Re-indexing the file or asking a more specific question should improve the answer quality.",
+                "Study Mode is designed for teaching clarity and revision usefulness.",
+                "The answer stays grounded in retrieved sources rather than unsupported recall.",
+                "It works well for iterative chapter-by-chapter follow-up questions.",
             ],
-            "insights_title": "Revision Points",
-            "insights": "Document not properly indexed. Try re-indexing.",
+            "insights_title": "Key Insights",
+            "insights": f"This study answer is optimized for the topic: {user_query}",
             "improvement_title": "Improvement Tips",
             "improvement_tips": [],
             "extra_sections": [
-                {"title": "2-mark Questions", "items": ["Please re-index the file or ask a narrower chapter question."]},
-                {"title": "5-mark Questions", "items": ["Please re-index the file or ask a narrower chapter question."]},
-                {"title": "10-mark Questions", "items": ["Please re-index the file or ask a narrower chapter question."]},
-            ],
-        }
-
-    if query_type == "document":
-        return {
-            "primary_title": "Summary",
-            "recommendations": [
-                "The uploaded document needs stronger indexing before a reliable summary can be generated.",
-                "The answer should be retried after re-indexing or with a more specific question.",
-                "Document-grounded questions will work best once chunk retrieval improves.",
-            ],
-            "reasons_title": "Important Topics",
-            "reasons": [
-                "This query depends on uploaded material rather than generic web context.",
-                "The current retrieval was too weak to safely claim document-specific details.",
-                "A cleaner index or narrower prompt should improve the next answer.",
-            ],
-            "insights_title": "Key Definitions / Concepts",
-            "insights": "Document not properly indexed. Try re-indexing.",
-            "improvement_title": "Improvement Tips",
-            "improvement_tips": [],
-            "extra_sections": [
-                {"title": "Probable Questions", "items": ["Please re-index the file or ask a more specific question."]},
-                {"title": "Short Answer Questions", "items": ["Please re-index the file or ask a more specific question."]},
-                {"title": "Long Answer Questions", "items": ["Please re-index the file or ask a more specific question."]},
+                {
+                    "title": "Revision Focus",
+                    "items": [
+                        "Memorize definitions, classifications, and high-frequency examples.",
+                        "Practice one short-answer and one long-answer explanation from the topic.",
+                    ],
+                },
             ],
         }
 
     if query_type == "interview":
         return {
-            "primary_title": "Top Interview Questions",
+            "primary_title": "Top Recommendations",
             "recommendations": [
-                "Tell me about your most relevant project and your exact contribution.",
-                "What trade-offs did you make in your implementation?",
-                "How would you improve the solution if you rebuilt it today?",
+                "Prepare concise answers for the most likely questions first.",
+                "Use concrete examples that show decisions, trade-offs, and outcomes.",
+                "Practice one follow-up answer for depth on every major example.",
             ],
-            "reasons_title": "Focus Areas",
+            "reasons_title": "Why This Answer",
             "reasons": [
-                "These questions test clarity, ownership, and technical depth.",
-                "They work as a practical fallback even when profile context is limited.",
-                "They can be expanded into a mock interview quickly.",
+                "Interview Prep is strongest when answers are specific and evidence-backed.",
+                "The answer is optimized for practical speaking use, not passive reading.",
+                "You can use follow-up prompts to generate mock interview rounds.",
             ],
-            "insights_title": "Difficulty Level",
-            "insights": "Start with foundational questions, then move into project depth and follow-up pressure questions.",
+            "insights_title": "Key Insights",
+            "insights": f"This interview-prep answer is aligned to the current query: {user_query}",
             "improvement_title": "Follow-up Questions",
             "improvement_tips": [
-                "How would you measure success?",
-                "What would you do differently next time?",
+                "Tighten one project story with clearer outcomes.",
+                "Prepare stronger trade-off explanations.",
             ],
             "extra_sections": [
                 {
-                    "title": "Short Model Answers",
+                    "title": "Follow-up Questions",
                     "items": [
-                        "Use one project example with your role, action, and outcome.",
-                        "Keep answers concrete and tied to tools, decisions, and impact.",
+                        "What trade-offs did you make and why?",
+                        "How would you improve the solution today?",
                     ],
                 }
             ],
@@ -974,18 +916,18 @@ def fallback_answer_payload(query_type="general", user_query=""):
         return {
             "primary_title": "Top Recommendations",
             "recommendations": [
-                "Most relevant direct answer based on current web evidence",
-                "Most useful comparison point from retrieved sources",
-                "Most practical next step based on the evidence",
+                "Use the strongest source-backed answer first.",
+                "Focus on the comparison or decision that matters most.",
+                "Take the next practical step suggested by the evidence.",
             ],
-            "reasons_title": "Why These",
+            "reasons_title": "Why This Answer",
             "reasons": [
-                "This fallback stays aligned to a current or web-oriented query.",
-                "It keeps the answer concise instead of drifting into a report.",
-                "It avoids unrelated recommendation types.",
+                "The answer is kept query-focused instead of broad or report-like.",
+                "Retrieved evidence is ranked before writing the final response.",
+                "It is designed to work well for follow-up questions in chat.",
             ],
-            "insights_title": "Quick Insights",
-            "insights": f"This is a web-oriented fallback path for the query: {user_query}",
+            "insights_title": "Key Insights",
+            "insights": f"This web-grounded fallback stays aligned to the query: {user_query}",
             "improvement_title": "Improvement Tips",
             "improvement_tips": [],
             "extra_sections": [],
@@ -1013,7 +955,7 @@ def fallback_answer_payload(query_type="general", user_query=""):
 
 
 def normalize_answer_payload(answer_payload, query_type="general", user_query=""):
-    fallback = fallback_answer_payload(query_type=query_type, user_query=user_query)
+    fallback = fallback_answer_payload(query_type=query_type or "web", user_query=user_query)
 
     if not isinstance(answer_payload, dict):
         return fallback
@@ -1097,7 +1039,7 @@ def _strip_markdown_for_pdf(value):
     return text
 
 
-def generate_pdf(query_title, report_text, web_sources, document_sources, mode_label="Web Research"):
+def generate_pdf(query_title, report_text, web_sources, mode_label="Web Research"):
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -1159,7 +1101,7 @@ def generate_pdf(query_title, report_text, web_sources, document_sources, mode_l
         safe_line = _clean_pdf_text(plain_line)
         if line.startswith("## "):
             section_name = plain_line[3:].strip().lower()
-            if section_name in {"sources", "web sources", "document sources"}:
+            if section_name in {"sources", "web sources"}:
                 skip_embedded_sources = True
                 continue
             story.append(Paragraph(safe_line[3:], section_style))
@@ -1195,21 +1137,6 @@ def generate_pdf(query_title, report_text, web_sources, document_sources, mode_l
     else:
         story.append(Paragraph("No web sources available.", body_style))
 
-    story.append(Spacer(1, 8))
-    story.append(Paragraph("Document Sources", section_style))
-    if document_sources:
-        for index, source in enumerate(document_sources, start=1):
-            filename = _clean_pdf_text(source.get("source_filename", source.get("title", f"Document {index}")))
-            chunk_id = source.get("chunk_id", 0)
-            content = _clean_pdf_text(source.get("content", ""))
-            story.append(Paragraph(f"<b>{index}. {filename}</b> (chunk {chunk_id})", body_style))
-            if content:
-                snippet = content[:260] + "..." if len(content) > 260 else content
-                story.append(Paragraph(snippet, body_style))
-            story.append(Spacer(1, 4))
-    else:
-        story.append(Paragraph("No document sources available.", body_style))
-
     doc.build(story)
     buffer.seek(0)
     return buffer
@@ -1230,114 +1157,6 @@ st.markdown("""
     <div class="search-caption">Frame your topic clearly to generate a more focused plan, stronger sources, and a sharper final report.</div>
 </div>
 """, unsafe_allow_html=True)
-
-st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
-
-st.markdown("""
-<div class="card">
-    <div class="section-kicker">Knowledge Base</div>
-    <div class="section-title">Index Local Documents</div>
-    <div class="section-copy">Upload PDF or TXT files to add document-grounded retrieval alongside live web research.</div>
-</div>
-""", unsafe_allow_html=True)
-
-uploaded_files = st.file_uploader(
-    "Upload PDF or TXT files",
-    type=["pdf", "txt"],
-    accept_multiple_files=True,
-    label_visibility="collapsed",
-)
-
-if uploaded_files:
-    upload_chips = []
-    for uploaded_file in uploaded_files:
-        size_kb = max(1, int(len(uploaded_file.getvalue()) / 1024))
-        upload_chips.append(
-            f"""
-            <div class="upload-chip">
-                <span>{uploaded_file.name}</span>
-                <span class="upload-chip-size">{size_kb} KB</span>
-            </div>
-            """
-        )
-    st.markdown(
-        f'<div class="upload-chip-row">{"".join(upload_chips)}</div>',
-        unsafe_allow_html=True,
-    )
-
-if st.button("Index Documents", use_container_width=False):
-    if not uploaded_files:
-        st.warning("Please upload at least one PDF or TXT file to index.")
-    else:
-        files_payload = []
-        for uploaded_file in uploaded_files:
-            files_payload.append(
-                (
-                    "files",
-                    (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type or "application/octet-stream"),
-                )
-            )
-
-        try:
-            index_response = requests.post(
-                f"{BACKEND_URL}/documents/index",
-                files=files_payload,
-                timeout=180,
-            )
-            index_data, index_parse_error = safe_json(index_response)
-
-            if index_data is None:
-                st.error(backend_error_message(index_response, None, index_parse_error))
-                try:
-                    st.code(index_response.text[:1500])
-                except Exception:
-                    pass
-            elif index_response.status_code != 200 or not index_data.get("success", False):
-                st.error(backend_error_message(index_response, index_data))
-            else:
-                indexed_files = index_data.get("files", [])
-                summary_lines = [
-                    (
-                        f"- **{item.get('filename', 'Unknown file')}**: "
-                        f"{item.get('pages_read', 0)} pages, "
-                        f"{item.get('characters_extracted', 0)} characters, "
-                        f"{item.get('chunks_created', item.get('chunks_indexed', 0))} chunks indexed"
-                    )
-                    for item in indexed_files
-                ]
-                total_chunks = index_data.get("chunks_created", index_data.get("document_chunks_indexed", 0))
-                failed_files = [
-                    item for item in indexed_files
-                    if item.get("chunks_created", item.get("chunks_indexed", 0)) == 0
-                ]
-                panel_title = "Indexed Successfully" if total_chunks > 0 else "Document Indexing Failed"
-                panel_description = (
-                    (
-                        f"These files are now available for document retrieval. "
-                        f"{index_data.get('pages_read', 0)} pages, "
-                        f"{index_data.get('characters_extracted', 0)} characters, "
-                        f"{index_data.get('indexed_document_count', total_chunks)} indexed chunks total."
-                    )
-                    if total_chunks > 0 else
-                    "PDF uploaded, but no readable text/chunks were indexed. Try another PDF or re-index."
-                )
-                render_markdown_panel(
-                    "Index Status",
-                    panel_title,
-                    "\n".join(summary_lines) or "- No files were indexed.",
-                    panel_description,
-                )
-                if index_data.get("file_errors"):
-                    st.warning(
-                        "Some files could not be indexed: "
-                        + "; ".join(item.get("error", "Unknown indexing error") for item in index_data["file_errors"])
-                    )
-                if failed_files:
-                    st.warning("Document could not be read properly")
-        except requests.exceptions.ConnectionError:
-            st.error("Could not connect to backend for document indexing.")
-        except Exception as e:
-            st.error(f"Unexpected indexing error: {e}")
 
 st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
 
@@ -1447,14 +1266,11 @@ if st.button("Run Research", use_container_width=False):
             final_text = data.get("final_report", data.get("final", ""))
             structured_response = data.get("structured_response", final_text)
             research_payload = data.get("research", {})
-            web_sources = data.get("web_sources", []) or extract_sources(research_payload)
-            document_sources = data.get("document_sources", [])
-            sources = data.get("sources", []) or (web_sources + document_sources)
+            web_sources = data.get("web_sources", []) or data.get("sources", []) or extract_sources(research_payload)
+            sources = web_sources
             metrics = build_metrics(plan_text, final_text, sources)
-            query_type = data.get("query_type", "general")
+            query_type = data.get("query_type", "web")
             mode_label = data.get("mode", "Web Research")
-            document_retrieval_failed = data.get("document_retrieval_failed", False)
-            status_message = data.get("status_message", "")
             answer_payload = normalize_answer_payload(
                 data.get("answer_payload", {}),
                 query_type=query_type,
@@ -1514,7 +1330,6 @@ if st.button("Run Research", use_container_width=False):
             """, unsafe_allow_html=True)
 
             web_sources_markdown = build_sources_markdown(web_sources, source_type="web")
-            document_sources_markdown = build_sources_markdown(document_sources, source_type="document")
             insight_items = "".join(f"<li>{item}</li>" for item in quick_insights)
             st.markdown(f"""
             <div class="summary-shell">
@@ -1529,21 +1344,18 @@ if st.button("Run Research", use_container_width=False):
                         </ul>
                     </div>
                     <div class="summary-card count-card">
-                        <div class="summary-kicker">Web Sources</div>
+                        <div class="summary-kicker">Sources</div>
                         <div class="count-value">{len(web_sources)}</div>
                         <div class="count-label">Live references used</div>
                     </div>
                     <div class="summary-card count-card">
-                        <div class="summary-kicker">Document Sources</div>
-                        <div class="count-value">{len(document_sources)}</div>
-                        <div class="count-label">Indexed chunks used</div>
+                        <div class="summary-kicker">Mode</div>
+                        <div class="count-value">{mode_label}</div>
+                        <div class="count-label">Active answer style</div>
                     </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
-
-            if document_retrieval_failed and status_message:
-                st.warning(status_message)
 
             top_recommendations_text = "\n".join(f"- {item}" for item in recommendations)
             st.markdown(f"""
@@ -1575,13 +1387,12 @@ if st.button("Run Research", use_container_width=False):
                 st.markdown(normalize_markdown(findings_text) or "_No content available._")
 
             combined_sources_text = (
-                f"## Web Sources\n{normalize_markdown(web_sources_markdown) or '_No web sources available._'}\n\n"
-                f"## Document Sources\n{normalize_markdown(document_sources_markdown) or '_No document sources available._'}"
+                f"## Sources\n{normalize_markdown(web_sources_markdown) or '_No web sources available._'}"
             )
-            with st.expander(f"Sources ({len(web_sources) + len(document_sources)})", expanded=False):
+            with st.expander(f"Sources ({len(web_sources)})", expanded=False):
                 st.markdown(combined_sources_text)
 
-            pdf_file = generate_pdf(query, structured_response, web_sources, document_sources, mode_label=mode_label)
+            pdf_file = generate_pdf(query, structured_response, web_sources, mode_label=mode_label)
             st.download_button(
                 "📄 Download Final Report (PDF)",
                 pdf_file,
