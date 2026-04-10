@@ -804,7 +804,9 @@ def extract_section(markdown_text, section_name):
 
 
 def extract_direct_answer_bullets(final_text, limit=5):
-    direct_answer = normalize_markdown(extract_section(final_text, "Top Recommendations"))
+    direct_answer = normalize_markdown(
+        extract_section(final_text, "Direct Answer") or extract_section(final_text, "Top Recommendations")
+    )
     bullets = []
     for line in direct_answer.splitlines():
         stripped = line.strip()
@@ -821,7 +823,7 @@ def extract_direct_answer_bullets(final_text, limit=5):
 def fallback_answer_payload(query_type="web", user_query=""):
     if query_type == "resume":
         return {
-            "primary_title": "Top Recommendations",
+            "primary_title": "Direct Answer",
             "recommendations": [
                 "Target roles that match your strongest evidence and the strongest market demand visible in the retrieved sources.",
                 "Emphasize measurable projects, technical depth, and outcomes instead of generic skill listings.",
@@ -853,7 +855,7 @@ def fallback_answer_payload(query_type="web", user_query=""):
 
     if query_type == "study":
         return {
-            "primary_title": "Top Recommendations",
+            "primary_title": "Direct Answer",
             "recommendations": [
                 "Start with the core concept and scope before memorizing details.",
                 "Focus on likely exam angles, repeated themes, and cause-effect relationships.",
@@ -882,7 +884,7 @@ def fallback_answer_payload(query_type="web", user_query=""):
 
     if query_type == "interview":
         return {
-            "primary_title": "Top Recommendations",
+            "primary_title": "Direct Answer",
             "recommendations": [
                 "Prepare concise answers for the most likely questions first.",
                 "Use concrete examples that show decisions, trade-offs, and outcomes.",
@@ -914,11 +916,11 @@ def fallback_answer_payload(query_type="web", user_query=""):
 
     if query_type == "web":
         return {
-            "primary_title": "Top Recommendations",
+            "primary_title": "Direct Answer",
             "recommendations": [
-                "Use the strongest source-backed answer first.",
-                "Focus on the comparison or decision that matters most.",
-                "Take the next practical step suggested by the evidence.",
+                f"For {user_query or 'the current question'}, the strongest answer depends on the retrieved evidence rather than a generic claim.",
+                "If the evidence is mixed, the most useful answer is the conditional conclusion supported by the strongest sources.",
+                "Where uncertainty remains, the answer should state the main factors driving the outcome.",
             ],
             "reasons_title": "Why This Answer",
             "reasons": [

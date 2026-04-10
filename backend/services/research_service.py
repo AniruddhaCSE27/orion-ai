@@ -40,6 +40,13 @@ INTERVIEW_MARKERS = {
 WEB_MARKERS = {
     "latest", "current", "today", "recent", "compare", "comparison", "tools", "news", "updates", "best"
 }
+GENERIC_META_PHRASES = {
+    "use the strongest source",
+    "focus on the comparison",
+    "take the next practical step",
+    "lead with the direct answer",
+    "use the highest-relevance sources",
+}
 
 
 def _safe_detail(value):
@@ -298,7 +305,7 @@ def _answer_payload_to_markdown(answer_payload):
     reasons = answer_payload.get("reasons", [])
     insights = answer_payload.get("insights", "")
     improvement_tips = answer_payload.get("improvement_tips", [])
-    primary_title = answer_payload.get("primary_title", "Top Recommendations")
+    primary_title = answer_payload.get("primary_title", "Direct Answer")
     reasons_title = answer_payload.get("reasons_title", "Why This Answer")
     insights_title = answer_payload.get("insights_title", "Key Insights")
     improvement_title = answer_payload.get("improvement_title", "Improvement Tips")
@@ -338,19 +345,22 @@ def _is_generic_response(query: str, final_report: str):
     query_terms = _query_terms(query)
     report_lower = (final_report or "").lower()
     if not query_terms:
-        return False
+        return any(phrase in report_lower for phrase in GENERIC_META_PHRASES)
+    if any(phrase in report_lower for phrase in GENERIC_META_PHRASES):
+        return True
     matches = sum(1 for term in query_terms if term in report_lower)
     return matches < max(1, min(2, len(query_terms)))
 
 
 def _fallback_answer_payload_by_type(query: str, query_type: str):
+    query_label = query.strip() or "the current question"
     if query_type == "resume":
         return {
-            "primary_title": "Top Recommendations",
+            "primary_title": "Direct Answer",
             "recommendations": [
-                "Target roles that align with your strongest evidence and the strongest market demand visible in the retrieved sources.",
-                "Emphasize measurable projects, technical depth, and outcomes instead of generic skill listings.",
-                "Use follow-up prompts to refine best-fit roles, resume bullets, or gap analysis.",
+                f"For {query_label}, the strongest answer depends on the exact skills, projects, and outcomes visible in the profile plus current market demand.",
+                "The most defensible recommendation is usually the role family where technical depth and measurable impact are clearest.",
+                "A narrower target role will produce a more precise resume analysis than a broad career prompt.",
             ],
             "reasons_title": "Why This Answer",
             "reasons": [
@@ -369,11 +379,11 @@ def _fallback_answer_payload_by_type(query: str, query_type: str):
         }
     if query_type == "study":
         return {
-            "primary_title": "Top Recommendations",
+            "primary_title": "Direct Answer",
             "recommendations": [
-                "Start with the core concept and scope before memorizing details.",
-                "Focus on likely exam angles, repeated themes, and cause-effect relationships.",
-                "Ask a follow-up to turn this topic into short answers, long answers, or revision notes.",
+                f"For {query_label}, the clearest starting point is the core definition, scope, and the most exam-relevant ideas.",
+                "The strongest answer should emphasize recurring concepts, cause-effect links, and likely question angles.",
+                "If you need more depth, the next pass should break the topic into definitions, short answers, or long answers.",
             ],
             "reasons_title": "Why This Answer",
             "reasons": [
@@ -389,11 +399,11 @@ def _fallback_answer_payload_by_type(query: str, query_type: str):
         }
     if query_type == "interview":
         return {
-            "primary_title": "Top Recommendations",
+            "primary_title": "Direct Answer",
             "recommendations": [
-                "Prepare concise answers for the most likely questions first.",
-                "Use concrete examples that show decisions, trade-offs, and outcomes.",
-                "Practice one follow-up answer for depth on every major example.",
+                f"For {query_label}, the strongest interview answer is the one supported by a concrete example, decision, and outcome.",
+                "Good interview preparation should show what you did, why you chose that approach, and what happened next.",
+                "Expect follow-up pressure on trade-offs, ownership, and measurable impact.",
             ],
             "reasons_title": "Why This Answer",
             "reasons": [
@@ -411,11 +421,11 @@ def _fallback_answer_payload_by_type(query: str, query_type: str):
             "extra_sections": [],
         }
     return {
-        "primary_title": "Top Recommendations",
+        "primary_title": "Direct Answer",
         "recommendations": [
-            "Use the strongest source-backed answer first.",
-            "Focus on the comparison or decision that matters most.",
-            "Take the next practical step suggested by the evidence.",
+            f"For {query_label}, the retrieved evidence supports a cautious, source-grounded answer rather than a generic conclusion.",
+            "Where the evidence is mixed, the best answer is conditional and should state the main factors driving the outcome.",
+            "Any strong claim should stay tied to the current reporting and analysis available in the retrieved sources.",
         ],
         "reasons_title": "Why This Answer",
         "reasons": [
