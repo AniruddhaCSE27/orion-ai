@@ -37,6 +37,15 @@ def _query_terms(user_query: str):
     return [term for term in terms if term not in stopwords and len(term) > 2]
 
 
+def _is_recommendation_query(user_query: str):
+    lowered = (user_query or "").lower()
+    markers = [
+        "best", "top", "tools", "apps", "websites", "software",
+        "platforms", "resources", "for students", "for coding",
+    ]
+    return any(marker in lowered for marker in markers)
+
+
 def _clean_text(value: str):
     return " ".join((value or "").split()).strip()
 
@@ -175,10 +184,19 @@ def _answer_addresses_query(payload, user_query: str):
 
     query_terms = _query_terms(user_query)
     lowered_text = combined_text.lower()
+    recommendation_query = _is_recommendation_query(user_query)
     if query_terms:
         matches = sum(1 for term in query_terms if term in lowered_text)
         if matches >= 1:
             return True
+        if recommendation_query:
+            list_items = []
+            for key in ("recommendations", "reasons"):
+                for item in payload.get(key, []):
+                    if isinstance(item, str) and item.strip():
+                        list_items.append(item)
+            if len(list_items) >= 3:
+                return True
 
     if any(token in first_answer.lower() for token in ["likely", "unlikely", "yes", "no", "risk", "more likely"]):
         return True
@@ -194,6 +212,7 @@ def write(plan_text: str, research_data, conversation_context: str = ""):
     question = research_data.get("question") or research_data.get("user_query", "")
     mode_label = research_data.get("mode", "Web Research")
     mode_key = research_data.get("query_type", "web")
+    recommendation_query = bool(research_data.get("recommendation_query")) or _is_recommendation_query(question)
     evidence_items = research_data.get("evidence_items") or research_data.get("retrieved_context", [])
     evidence_text = research_data.get("evidence") or ""
     evidence_block = _build_evidence_block(evidence_text or evidence_items)
@@ -210,6 +229,14 @@ RULES:
 - Do not output methodology language
 - If the evidence is limited, say so briefly and stay concrete
 - Use simple, strong, human-readable language
+"""
+    if recommendation_query:
+        system_prompt += """
+- For recommendation or list queries, lead with the best 3 to 5 options from the evidence
+- Prefer concrete product, tool, or app names over abstract analysis
+- Keep the answer practical and scannable
+"""
+    system_prompt += """
 
 OUTPUT FORMAT:
 

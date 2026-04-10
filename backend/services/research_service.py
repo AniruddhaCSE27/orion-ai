@@ -363,6 +363,17 @@ def _debug_sources(prefix: str, items):
         print(f"{prefix} source_{index} title={title} snippet={snippet}")
 
 
+def _debug_raw_tavily_results(prefix: str, research_data):
+    results = research_data.get("results", []) if isinstance(research_data, dict) else []
+    logger.info("%s raw_result_count=%s", prefix, len(results))
+    print(f"{prefix} raw_result_count={len(results)}")
+    for index, item in enumerate(results[:3], start=1):
+        title = item.get("title", "Untitled source")
+        snippet = _source_snippet(item, limit=220)
+        logger.info("%s raw_result_%s title=%s snippet=%s", prefix, index, title, snippet)
+        print(f"{prefix} raw_result_{index} title={title} snippet={snippet}")
+
+
 def _dedupe_sources(sources, limit: int = 6):
     deduped = []
     seen = set()
@@ -540,6 +551,7 @@ def run_research_pipeline(query: str):
         )
         logger.info("retry_queries_used=%s", (research_data or {}).get("attempted_queries", []))
         print(f"retry_queries_used={(research_data or {}).get('attempted_queries', [])}")
+        _debug_raw_tavily_results("tavily_initial", research_data)
 
         if not initial_results:
             retry_query = _expanded_query(query, query_type)
@@ -555,6 +567,7 @@ def run_research_pipeline(query: str):
                     {"stage": "tavily_retry_search", "message": str(exc)},
                 )
             initial_results = research_data.get("results", []) if isinstance(research_data, dict) else []
+            _debug_raw_tavily_results("tavily_no_result_retry", research_data)
 
         try:
             web_store = VectorStore(namespace="web")
@@ -626,6 +639,7 @@ def run_research_pipeline(query: str):
                     "Live search retry failed after weak evidence.",
                     {"stage": "tavily_weak_evidence_retry", "message": str(exc)},
                 )
+            _debug_raw_tavily_results("tavily_weak_evidence_retry", retry_data)
             retry_documents = _build_web_documents(retry_data)
             _debug_sources("tavily_retry_results", retry_documents)
             try:
@@ -673,6 +687,7 @@ def run_research_pipeline(query: str):
         writer_payload["user_query"] = query
         writer_payload["query_type"] = query_type
         writer_payload["mode"] = mode
+        writer_payload["recommendation_query"] = _is_recommendation_query(query)
         writer_payload["has_resume_context"] = _has_resume_context(query, conversation_context)
         logger.info("writer_input source_count=%s evidence_length=%s", len(writer_payload["sources"]), len(writer_payload["evidence"]))
         print(f"writer_input source_count={len(writer_payload['sources'])} evidence_length={len(writer_payload['evidence'])}")
@@ -747,6 +762,9 @@ def run_research_pipeline(query: str):
             "mode": mode,
             "memory_used": bool(conversation_context),
             "fallback_triggered": fallback_triggered,
+            "debug_source_count": source_count,
+            "debug_evidence_length": len(evidence_text),
+            "debug_retry_used": (research_data or {}).get("attempted_queries", []),
             "research": writer_payload,
             "final": final_report,
         }
