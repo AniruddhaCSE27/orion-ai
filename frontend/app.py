@@ -918,9 +918,9 @@ def fallback_answer_payload(query_type="web", user_query=""):
         return {
             "primary_title": "Direct Answer",
             "recommendations": [
-                f"For {user_query or 'the current question'}, the strongest answer depends on the retrieved evidence rather than a generic claim.",
-                "If the evidence is mixed, the most useful answer is the conditional conclusion supported by the strongest sources.",
-                "Where uncertainty remains, the answer should state the main factors driving the outcome.",
+                f"For {user_query or 'the current question'}, the clearest response is the conclusion best supported by the current retrieved sources.",
+                "If the reporting is mixed, the response should stay cautious but still state the most likely outcome first.",
+                "Where uncertainty remains, the response should explain the main reasons without drifting into generic advice.",
             ],
             "reasons_title": "Why This Answer",
             "reasons": [

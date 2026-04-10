@@ -46,6 +46,10 @@ GENERIC_META_PHRASES = {
     "take the next practical step",
     "lead with the direct answer",
     "use the highest-relevance sources",
+    "depends on the evidence",
+    "state the factors",
+    "the answer should",
+    "the most useful answer",
 }
 
 
@@ -467,7 +471,9 @@ def run_research_pipeline(query: str):
 
         web_sources = _dedupe_sources(retrieved_context or _extract_sources(research_data), limit=6)
         writer_payload = dict(research_data) if isinstance(research_data, dict) else {}
+        writer_payload["question"] = query
         writer_payload["retrieved_context"] = retrieved_context
+        writer_payload["evidence"] = retrieved_context
         writer_payload["user_query"] = query
         writer_payload["query_type"] = query_type
         writer_payload["mode"] = mode
