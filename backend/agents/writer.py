@@ -7,14 +7,20 @@ from backend.core.config import config
 client = OpenAI(api_key=config.OPENAI_API_KEY)
 
 GENERIC_META_PHRASES = [
+    "the answer should",
+    "the response should",
+    "the clearest response",
+    "depends on the retrieved evidence",
     "depends on the evidence",
+    "if reporting is mixed",
+    "source-backed answer first",
+    "this fallback",
+    "aligned to the query",
+    "best supported by",
     "focus on the strongest source",
     "focus on",
     "state the factors",
-    "the most useful answer is",
-    "strongest source-backed answer",
-    "the answer should",
-    "how to answer",
+    "the most useful answer",
     "methodology",
     "framework",
 ]
@@ -48,7 +54,7 @@ def _contains_generic_meta_language(text: str):
 
 
 def _extract_section_block(text: str, section_name: str):
-    pattern = rf"{section_name}:\s*(.*-)(-=\n[A-Z ]+:|\Z)"
+    pattern = rf"{re.escape(section_name)}:\s*(.*?)(?=\n[A-Z ][A-Z ]*:|\Z)"
     match = re.search(pattern, text, re.DOTALL)
     if not match:
         return ""
@@ -93,69 +99,91 @@ def _context_bullets(evidence, limit: int = 3):
 
 def _fallback_answer(question: str, mode_key: str, evidence):
     evidence_bullets = _context_bullets(evidence, limit=3)
-    if mode_key == "resume":
-        answer = f"The best role fit for '{question}' is whichever path is most strongly supported by your actual project outcomes, tools, and measurable impact."
-        conclusion = "A narrower role target will produce a sharper resume recommendation than a broad career question."
-    elif mode_key == "study":
-        answer = f"The clearest way to answer '{question}' is to start with the core concept, then move to the most exam-relevant points and examples."
-        conclusion = "The strongest study answer is the one that makes the topic easy to recall under exam pressure."
-    elif mode_key == "interview":
-        answer = f"The strongest interview response to '{question}' is the one backed by a concrete example, a decision you made, and a clear outcome."
-        conclusion = "Specific examples beat broad textbook-style answers in interview settings."
-    else:
-        answer = f"Based on the retrieved reporting, the most likely answer to '{question}' is the conclusion best supported by the strongest current evidence, even if some uncertainty remains."
-        conclusion = "The conclusion should stay grounded in current reporting and avoid overstating certainty when the evidence is mixed."
 
-    reasons = evidence_bullets or [
-        "Recent reporting and analysis were used to build the answer.",
-        "The conclusion was kept cautious where certainty was limited.",
-        "The response was shaped around the user's exact question rather than a generic topic summary.",
-    ]
-    evidence_lines = evidence_bullets[:2] or ["Retrieved evidence was limited, so this conclusion should be treated cautiously."]
+    if mode_key == "resume":
+        direct_answer = f"The strongest role fit for '{question}' is most likely the role family that matches your clearest projects, technical depth, and measurable outcomes."
+        why_points = [
+            "Role fit is strongest where your skills and outcomes are easiest to prove.",
+            "Market demand matters, but profile evidence matters more than broad claims.",
+            "A narrower role target usually produces a much stronger resume strategy.",
+        ]
+        key_insights = evidence_bullets[:2] or [
+            "Your best projects and results should drive the recommendation.",
+            "A sharper target role usually improves resume quality and interview conversion.",
+        ]
+        conclusion = "Choose the role path where your evidence is strongest rather than aiming too broadly."
+    elif mode_key == "study":
+        direct_answer = f"For '{question}', the clearest starting point is the core concept, what it means, and the most important points connected to it."
+        why_points = [
+            "Study answers work best when they explain the topic before expanding into detail.",
+            "Repeated concepts and likely question angles matter most for revision.",
+            "Short, memorable explanations are more useful than broad summaries.",
+        ]
+        key_insights = evidence_bullets[:2] or [
+            "Start with definitions and scope before examples.",
+            "Focus on the points most likely to appear in recall-based questions.",
+        ]
+        conclusion = "The topic becomes easier to remember when reduced to the core idea, examples, and likely exam points."
+    elif mode_key == "interview":
+        direct_answer = f"For '{question}', the most convincing direction is a concrete example that shows what you did, why you chose it, and what result it produced."
+        why_points = [
+            "Interviewers trust examples more than abstract claims.",
+            "Clear ownership and decision-making make answers stronger.",
+            "Outcomes and trade-offs usually separate average answers from strong ones.",
+        ]
+        key_insights = evidence_bullets[:2] or [
+            "Specific examples are more persuasive than generic statements.",
+            "Trade-offs and results are usually the most important follow-up areas.",
+        ]
+        conclusion = "A specific example with clear trade-offs and outcomes is usually the most persuasive direction."
+    else:
+        direct_answer = f"The most likely answer to '{question}' is uncertain, but the current evidence points to a conditional outcome rather than a simple clear-cut one."
+        why_points = [
+            "Recent reporting does not support a simple one-sided conclusion.",
+            "Major outcomes are usually shaped by several political and strategic pressures at once.",
+            "Where evidence is mixed, the safest path is to state the likeliest conclusion with clear uncertainty.",
+        ]
+        key_insights = evidence_bullets[:2] or [
+            "Mixed reporting usually means the final outcome remains uncertain.",
+            "Political constraints and external actors often matter as much as raw capability.",
+        ]
+        conclusion = "The likeliest outcome is usually a contested or uncertain one, not a simple decisive result."
+
     return {
         "primary_title": "Direct Answer",
-        "recommendations": [answer],
-        "reasons_title": "Key Points",
-        "reasons": reasons[:5],
-        "insights_title": "Evidence",
-        "insights": "\n".join(f"- {item}" for item in evidence_lines),
+        "recommendations": [direct_answer],
+        "reasons_title": "Why",
+        "reasons": why_points[:5],
+        "insights_title": "Key Insights",
+        "insights": "\n".join(f"- {item}" for item in key_insights[:3]),
         "improvement_title": "",
         "improvement_tips": [],
         "extra_sections": [
-            {
-                "title": "Conclusion",
-                "items": [conclusion],
-            }
+            {"title": "Conclusion", "items": [conclusion]}
         ],
     }
 
 
 def _parse_writer_output(text: str, question: str, mode_key: str, evidence):
-    final_answer = _clean_text(_extract_section_block(text, "FINAL ANSWER"))
-    key_points = _extract_bullets(_extract_section_block(text, "KEY POINTS"), limit=5)
+    direct_answer = _clean_text(_extract_section_block(text, "DIRECT ANSWER") or _extract_section_block(text, "FINAL ANSWER"))
+    why_points = _extract_bullets(_extract_section_block(text, "WHY"), limit=5)
+    key_points = _extract_bullets(_extract_section_block(text, "KEY INSIGHTS") or _extract_section_block(text, "KEY POINTS"), limit=5)
     evidence_points = _extract_bullets(_extract_section_block(text, "EVIDENCE"), limit=4)
     conclusion = _clean_text(_extract_section_block(text, "CONCLUSION"))
 
-    if not final_answer:
+    if not direct_answer:
         return _fallback_answer(question, mode_key, evidence)
 
     return {
         "primary_title": "Direct Answer",
-        "recommendations": [final_answer],
-        "reasons_title": "Key Points",
-        "reasons": key_points or _context_bullets(evidence, limit=3),
-        "insights_title": "Evidence",
-        "insights": "\n".join(f"- {item}" for item in evidence_points) if evidence_points else "\n".join(
-            f"- {item}" for item in (_context_bullets(evidence, limit=2) or ["Retrieved evidence was limited."])
-        ),
+        "recommendations": [direct_answer],
+        "reasons_title": "Why",
+        "reasons": why_points or _context_bullets(evidence, limit=3),
+        "insights_title": "Key Insights",
+        "insights": "\n".join(f"- {item}" for item in (key_points or evidence_points or _context_bullets(evidence, limit=2))),
         "improvement_title": "",
         "improvement_tips": [],
-        "extra_sections": [
-            {
-                "title": "Conclusion",
-                "items": [conclusion or final_answer],
-            }
-        ],
+        "extra_sections": [{"title": "Conclusion", "items": [conclusion or direct_answer]}],
     }
 
 
@@ -200,7 +228,7 @@ def _answer_addresses_query(payload, user_query: str):
         if matches >= 1:
             return True
 
-    if any(token in first_answer.lower() for token in ["likely", "unlikely", "yes", "no", "uncertain", "risk", "more likely"]):
+    if any(token in first_answer.lower() for token in ["likely", "unlikely", "yes", "no", "uncertain", "stalemate", "risk", "more likely"]):
         return True
 
     return False
@@ -231,29 +259,29 @@ RULES:
 
 OUTPUT FORMAT:
 
-FINAL ANSWER:
-<clear direct answer in 1–2 lines>
+DIRECT ANSWER:
+<actual answer to the question>
 
-KEY POINTS:
-- Bullet 1
-- Bullet 2
-- Bullet 3
+WHY:
+- reason 1
+- reason 2
+- reason 3
 
-EVIDENCE:
-- Source-backed point 1
-- Source-backed point 2
+KEY INSIGHTS:
+- concise supporting point
+- concise supporting point
 
 CONCLUSION:
-<short final takeaway>"""
+<practical final takeaway>"""
 
     def _messages(strict_retry: bool = False):
         retry_block = ""
         if strict_retry:
             retry_block = (
                 "\nRETRY RULES:\n"
-                "- The previous answer was too generic, meta, or indirect.\n"
-                "- Answer the question itself in the first 1-2 lines.\n"
-                "- Do not use phrases like 'depends on the evidence', 'focus on', 'the answer should', or 'the most useful answer is'.\n"
+                "- Answer the question directly in plain language. Do not describe how to answer.\n"
+                "- Start with the real conclusion, even if uncertainty remains.\n"
+                "- Avoid meta phrases such as 'the answer should', 'the response should', 'the clearest response', 'if reporting is mixed', or 'best supported by'.\n"
             )
         return [
             {"role": "system", "content": system_prompt},

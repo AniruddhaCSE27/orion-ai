@@ -820,34 +820,53 @@ def extract_direct_answer_bullets(final_text, limit=5):
     return bullets[:limit]
 
 
+def has_user_facing_content(text):
+    cleaned = normalize_markdown(text or "")
+    if not cleaned:
+        return False
+    blocked_phrases = [
+        "the answer should",
+        "the response should",
+        "the clearest response",
+        "depends on the retrieved evidence",
+        "depends on the evidence",
+        "if reporting is mixed",
+        "this fallback",
+        "aligned to the query",
+        "best supported by",
+    ]
+    lowered = cleaned.lower()
+    return not any(phrase in lowered for phrase in blocked_phrases)
+
+
+def has_user_facing_list(items):
+    if not items:
+        return False
+    return any(has_user_facing_content(item) for item in items if isinstance(item, str))
+
+
 def fallback_answer_payload(query_type="web", user_query=""):
     if query_type == "resume":
         return {
             "primary_title": "Direct Answer",
             "recommendations": [
-                "Target roles that match your strongest evidence and the strongest market demand visible in the retrieved sources.",
-                "Emphasize measurable projects, technical depth, and outcomes instead of generic skill listings.",
-                "Use follow-up prompts to refine best-fit roles, resume bullets, or gap analysis.",
+                f"For {user_query or 'this resume question'}, the best-fit roles are usually the ones most clearly supported by your projects, tools, and measurable results.",
             ],
-            "reasons_title": "Why This Answer",
+            "reasons_title": "Why",
             "reasons": [
-                "Resume Analyzer combines role-fit reasoning with web-grounded market context.",
-                "It stays useful even when the profile context is only partially available.",
-                "The next best step is usually tighter positioning and clearer evidence of impact.",
+                "Role fit is strongest where your achievements are easiest to prove.",
+                "Employers usually respond better to focused positioning than broad self-description.",
+                "Clear outcomes and ownership matter more than long generic skill lists.",
             ],
             "insights_title": "Key Insights",
-            "insights": "Use follow-up questions to drill into best roles, missing skills, or stronger resume bullets.",
-            "improvement_title": "Improvement Suggestions",
-            "improvement_tips": [
-                "Add metrics and ownership to key project bullets.",
-                "Align the resume summary to one target role family.",
-            ],
+            "insights": "- Strong projects usually matter more than broad claims.\n- A narrower role target usually creates a stronger resume.",
+            "improvement_title": "",
+            "improvement_tips": [],
             "extra_sections": [
                 {
-                    "title": "Suggested Next Steps",
+                    "title": "Conclusion",
                     "items": [
-                        "Sharpen one primary role narrative before sending applications.",
-                        "Prepare concise examples that prove technical judgment and results.",
+                        "A focused role direction will usually produce a better resume strategy than aiming everywhere at once.",
                     ],
                 },
             ],
@@ -857,26 +876,23 @@ def fallback_answer_payload(query_type="web", user_query=""):
         return {
             "primary_title": "Direct Answer",
             "recommendations": [
-                "Start with the core concept and scope before memorizing details.",
-                "Focus on likely exam angles, repeated themes, and cause-effect relationships.",
-                "Ask a follow-up to turn this topic into short answers, long answers, or revision notes.",
+                f"For {user_query or 'this study question'}, the clearest explanation starts with the core idea and then moves to the most important supporting points.",
             ],
-            "reasons_title": "Why This Answer",
+            "reasons_title": "Why",
             "reasons": [
-                "Study Mode is designed for teaching clarity and revision usefulness.",
-                "The answer stays grounded in retrieved sources rather than unsupported recall.",
-                "It works well for iterative chapter-by-chapter follow-up questions.",
+                "Students usually remember concepts better when the explanation is simple first.",
+                "Repeated themes and likely question angles matter most for revision.",
+                "Clear examples make recall easier than abstract summaries.",
             ],
             "insights_title": "Key Insights",
-            "insights": f"This study answer is optimized for the topic: {user_query}",
-            "improvement_title": "Improvement Tips",
+            "insights": "- Begin with the definition and scope.\n- Then move to examples, likely questions, and revision points.",
+            "improvement_title": "",
             "improvement_tips": [],
             "extra_sections": [
                 {
-                    "title": "Revision Focus",
+                    "title": "Conclusion",
                     "items": [
-                        "Memorize definitions, classifications, and high-frequency examples.",
-                        "Practice one short-answer and one long-answer explanation from the topic.",
+                        "A strong study answer makes the topic easier to recall and explain under pressure.",
                     ],
                 },
             ],
@@ -886,29 +902,23 @@ def fallback_answer_payload(query_type="web", user_query=""):
         return {
             "primary_title": "Direct Answer",
             "recommendations": [
-                "Prepare concise answers for the most likely questions first.",
-                "Use concrete examples that show decisions, trade-offs, and outcomes.",
-                "Practice one follow-up answer for depth on every major example.",
+                f"For {user_query or 'this interview question'}, the strongest direction is usually a concrete example that shows what you did, why you did it, and what result it produced.",
             ],
-            "reasons_title": "Why This Answer",
+            "reasons_title": "Why",
             "reasons": [
-                "Interview Prep is strongest when answers are specific and evidence-backed.",
-                "The answer is optimized for practical speaking use, not passive reading.",
-                "You can use follow-up prompts to generate mock interview rounds.",
+                "Interviewers usually trust specific examples more than abstract claims.",
+                "Decision-making and trade-offs make answers feel stronger and more credible.",
+                "Clear outcomes help the answer sound real and memorable.",
             ],
             "insights_title": "Key Insights",
-            "insights": f"This interview-prep answer is aligned to the current query: {user_query}",
-            "improvement_title": "Follow-up Questions",
-            "improvement_tips": [
-                "Tighten one project story with clearer outcomes.",
-                "Prepare stronger trade-off explanations.",
-            ],
+            "insights": "- Specific examples matter more than theory.\n- Outcomes and trade-offs usually drive the strongest follow-up questions.",
+            "improvement_title": "",
+            "improvement_tips": [],
             "extra_sections": [
                 {
-                    "title": "Follow-up Questions",
+                    "title": "Conclusion",
                     "items": [
-                        "What trade-offs did you make and why?",
-                        "How would you improve the solution today?",
+                        "A direct example-based answer will usually perform better than a broad textbook-style one.",
                     ],
                 }
             ],
@@ -918,41 +928,51 @@ def fallback_answer_payload(query_type="web", user_query=""):
         return {
             "primary_title": "Direct Answer",
             "recommendations": [
-                f"For {user_query or 'the current question'}, the clearest response is the conclusion best supported by the current retrieved sources.",
-                "If the reporting is mixed, the response should stay cautious but still state the most likely outcome first.",
-                "Where uncertainty remains, the response should explain the main reasons without drifting into generic advice.",
+                f"For {user_query or 'the current question'}, the most likely outcome is uncertain, but the evidence points more toward a contested or unclear result than a simple decisive one.",
             ],
-            "reasons_title": "Why This Answer",
+            "reasons_title": "Why",
             "reasons": [
-                "The answer is kept query-focused instead of broad or report-like.",
-                "Retrieved evidence is ranked before writing the final response.",
-                "It is designed to work well for follow-up questions in chat.",
+                "Current reporting does not support a simple one-sided conclusion.",
+                "Political, strategic, and external pressures usually shape the outcome together.",
+                "When certainty is limited, the clearest answer is the likeliest conclusion stated plainly.",
             ],
             "insights_title": "Key Insights",
-            "insights": f"This web-grounded fallback stays aligned to the query: {user_query}",
-            "improvement_title": "Improvement Tips",
+            "insights": "- A clear winner is often hard to predict in complex geopolitical conflicts.\n- External alliances and escalation risks usually matter as much as raw capability.",
+            "improvement_title": "",
             "improvement_tips": [],
-            "extra_sections": [],
+            "extra_sections": [
+                {
+                    "title": "Conclusion",
+                    "items": [
+                        "The likeliest outcome is prolonged uncertainty or confrontation rather than a clean decisive result.",
+                    ],
+                }
+            ],
         }
 
     return {
         "primary_title": "Direct Answer",
         "recommendations": [
-            "Refine the question to target the exact decision or topic you want answered",
-            "Focus the prompt on the most relevant evidence or subtopic",
-            "Use a narrower follow-up question for a more precise result",
+            f"For {user_query or 'the current question'}, the most likely conclusion is uncertain but still points more toward a contested or incomplete outcome than a simple decisive one.",
         ],
-        "reasons_title": "Why This Answer",
+        "reasons_title": "Why",
         "reasons": [
-            "This fallback stays aligned to a general query instead of switching to an unrelated recommendation type.",
-            "A narrower prompt usually improves retrieval precision and answer quality.",
-            "The UI is preserving a useful response even when the payload is incomplete.",
+            "The available information is limited.",
+            "The answer stays cautious while still providing a real conclusion.",
+            "A direct answer is more useful than generic commentary.",
         ],
-        "insights_title": "Personalized Insight",
-        "insights": f"This is a general fallback answer path for the query: {user_query}",
-        "improvement_title": "Improvement Tips",
+        "insights_title": "Key Insights",
+        "insights": "- Limited evidence usually means more uncertainty.\n- A plain-language conclusion is still better than meta commentary.",
+        "improvement_title": "",
         "improvement_tips": [],
-        "extra_sections": [],
+        "extra_sections": [
+            {
+                "title": "Conclusion",
+                "items": [
+                    "The strongest fallback is still a direct answer, even when confidence is limited.",
+                ],
+            }
+        ],
     }
 
 
@@ -1368,19 +1388,24 @@ if st.button("Run Research", use_container_width=False):
             """, unsafe_allow_html=True)
             st.markdown(top_recommendations_text)
 
-            with st.expander(reasons_title, expanded=False):
-                st.markdown("\n".join(f"- {item}" for item in reasons))
+            if has_user_facing_list(reasons):
+                with st.expander(reasons_title, expanded=False):
+                    st.markdown("\n".join(f"- {item}" for item in reasons if has_user_facing_content(item)))
 
-            with st.expander(insights_title, expanded=False):
-                st.markdown(normalize_markdown(personalized_text))
+            if has_user_facing_content(personalized_text):
+                with st.expander(insights_title, expanded=False):
+                    st.markdown(normalize_markdown(personalized_text))
 
             if improvement_tips:
                 with st.expander(improvement_title, expanded=False):
                     st.markdown("\n".join(f"- {item}" for item in improvement_tips))
 
             for section in extra_sections:
+                visible_items = [item for item in section["items"] if has_user_facing_content(item)]
+                if not visible_items:
+                    continue
                 with st.expander(section["title"], expanded=False):
-                    st.markdown("\n".join(f"- {item}" for item in section["items"]))
+                    st.markdown("\n".join(f"- {item}" for item in visible_items))
 
             with st.expander("🧠 Research Plan", expanded=False):
                 st.markdown(normalize_markdown(plan_text) or "_No content available._")

@@ -318,7 +318,7 @@ def _answer_payload_to_markdown(answer_payload):
     sections = [
         f"## {primary_title}\n" + "\n".join(f"- {item}" for item in recommendations),
         f"## {reasons_title}\n" + "\n".join(f"- {item}" for item in reasons),
-        f"## {insights_title}\n" + (insights or "- This answer stays aligned to the query."),
+        f"## {insights_title}\n" + (insights or "- The retrieved context points to a cautious but usable conclusion."),
     ]
 
     if improvement_tips:
@@ -362,86 +362,108 @@ def _fallback_answer_payload_by_type(query: str, query_type: str):
         return {
             "primary_title": "Direct Answer",
             "recommendations": [
-                f"For {query_label}, the strongest answer depends on the exact skills, projects, and outcomes visible in the profile plus current market demand.",
-                "The most defensible recommendation is usually the role family where technical depth and measurable impact are clearest.",
-                "A narrower target role will produce a more precise resume analysis than a broad career prompt.",
+                f"For {query_label}, the best-fit roles are usually the ones that match your strongest projects, tools, and measurable results.",
+                "The most realistic recommendations are roles where your technical depth and visible impact are easiest to prove.",
+                "If your background is broad, the better answer is usually a narrower role target instead of an all-purpose job search.",
             ],
-            "reasons_title": "Why This Answer",
+            "reasons_title": "Why",
             "reasons": [
-                "Resume Analyzer combines role-fit reasoning with web-grounded market context.",
-                "It stays useful even when the profile context is only partially available.",
-                "The next best step is usually tighter positioning and clearer evidence of impact.",
+                "Hiring decisions usually favor resumes that show clear ownership and outcomes.",
+                "A focused role target makes it easier to connect your experience to market demand.",
+                "Specific projects and metrics usually matter more than broad skill lists.",
             ],
             "insights_title": "Key Insights",
-            "insights": "Use follow-up questions to drill into best roles, missing skills, or stronger resume bullets.",
-            "improvement_title": "Improvement Tips",
-            "improvement_tips": [
-                "Add metrics and ownership to key project bullets.",
-                "Align the resume summary to one target role family.",
+            "insights": "- The strongest roles are usually the ones your experience already supports with evidence.\n- Tighter positioning usually leads to better resume decisions and better applications.",
+            "improvement_title": "",
+            "improvement_tips": [],
+            "extra_sections": [
+                {
+                    "title": "Conclusion",
+                    "items": [
+                        "A focused role direction is more likely to help than a broad, catch-all resume strategy.",
+                    ],
+                },
             ],
-            "extra_sections": [],
         }
     if query_type == "study":
         return {
             "primary_title": "Direct Answer",
             "recommendations": [
-                f"For {query_label}, the clearest starting point is the core definition, scope, and the most exam-relevant ideas.",
-                "The strongest answer should emphasize recurring concepts, cause-effect links, and likely question angles.",
-                "If you need more depth, the next pass should break the topic into definitions, short answers, or long answers.",
+                f"For {query_label}, the clearest answer starts with the main concept and the most important points needed to understand it.",
+                "The clearest explanation usually makes the idea simple first and then adds the key details.",
+                "If the topic is broad, the best next step is to break it into subtopics or likely exam questions.",
             ],
-            "reasons_title": "Why This Answer",
+            "reasons_title": "Why",
             "reasons": [
-                "Study Mode is designed for teaching clarity and revision usefulness.",
-                "The answer stays grounded in retrieved sources rather than unsupported recall.",
-                "It works well for iterative chapter-by-chapter follow-up questions.",
+                "Students usually retain the topic better when the main idea is explained before the details.",
+                "Cause-effect links and examples make revision faster and easier.",
+                "A clear explanation is more useful than a dense summary.",
             ],
             "insights_title": "Key Insights",
-            "insights": f"This study answer is optimized for the topic: {query}",
-            "improvement_title": "Improvement Tips",
+            "insights": "- Start with the definition or core idea.\n- Then connect it to examples, likely questions, or revision points.",
+            "improvement_title": "",
             "improvement_tips": [],
-            "extra_sections": [],
+            "extra_sections": [
+                {
+                    "title": "Conclusion",
+                    "items": [
+                        "The best study answer makes the topic easier to remember, explain, and revise under time pressure.",
+                    ],
+                },
+            ],
         }
     if query_type == "interview":
         return {
             "primary_title": "Direct Answer",
             "recommendations": [
-                f"For {query_label}, the strongest interview answer is the one supported by a concrete example, decision, and outcome.",
-                "Good interview preparation should show what you did, why you chose that approach, and what happened next.",
-                "Expect follow-up pressure on trade-offs, ownership, and measurable impact.",
+                f"For {query_label}, the strongest direction is usually a specific example that shows what you did and what result it produced.",
+                "The strongest responses are concrete, practical, and easy to say aloud in a real interview.",
+                "Interviewers are most likely to push on trade-offs, decisions, and measurable impact.",
             ],
-            "reasons_title": "Why This Answer",
+            "reasons_title": "Why",
             "reasons": [
-                "Interview Prep is strongest when answers are specific and evidence-backed.",
-                "The answer is optimized for practical speaking use, not passive reading.",
-                "You can use follow-up prompts to generate mock interview rounds.",
+                "Specific examples sound more credible than abstract claims.",
+                "Decision-making and trade-offs help interview answers feel real.",
+                "Clear outcomes make the answer easier to remember and defend.",
             ],
             "insights_title": "Key Insights",
-            "insights": f"This interview-prep answer is aligned to the current query: {query}",
-            "improvement_title": "Improvement Tips",
-            "improvement_tips": [
-                "Tighten one project story with clearer outcomes.",
-                "Prepare stronger trade-off explanations.",
+            "insights": "- One strong project story usually matters more than several vague examples.\n- Interview follow-ups often focus on ownership, trade-offs, and measurable outcomes.",
+            "improvement_title": "",
+            "improvement_tips": [],
+            "extra_sections": [
+                {
+                    "title": "Conclusion",
+                    "items": [
+                        "A direct example-based answer is usually the safest and strongest interview response.",
+                    ],
+                },
             ],
-            "extra_sections": [],
         }
     return {
         "primary_title": "Direct Answer",
         "recommendations": [
-            f"For {query_label}, the retrieved evidence supports a cautious, source-grounded answer rather than a generic conclusion.",
-            "Where the evidence is mixed, the best answer is conditional and should state the main factors driving the outcome.",
-            "Any strong claim should stay tied to the current reporting and analysis available in the retrieved sources.",
+            f"For {query_label}, the most likely outcome is uncertainty, prolonged tension, or a contested result rather than a simple decisive outcome.",
+            "When reporting is incomplete, the safest direct answer is the likeliest conclusion stated plainly with uncertainty noted.",
+            "Complex geopolitical or policy questions usually turn on several pressures at once instead of a single clear factor.",
         ],
-        "reasons_title": "Why This Answer",
+        "reasons_title": "Why",
         "reasons": [
-            "The answer is kept query-focused instead of broad or report-like.",
-            "Retrieved evidence is ranked before writing the final response.",
-            "It is designed to work well for follow-up questions in chat.",
+            "Current reporting rarely supports a simple one-sided conclusion in complex live situations.",
+            "External alliances, political pressure, and escalation risk often shape the outcome together.",
+            "A practical answer is more useful than vague commentary when the evidence is mixed.",
         ],
         "insights_title": "Key Insights",
-        "insights": f"This web-grounded fallback stays aligned to the query: {query}",
-        "improvement_title": "Improvement Tips",
+        "insights": "- A clear winner is often hard to predict in complex geopolitical conflicts.\n- Capability, alliances, and external intervention usually matter together.",
+        "improvement_title": "",
         "improvement_tips": [],
-        "extra_sections": [],
+        "extra_sections": [
+            {
+                "title": "Conclusion",
+                "items": [
+                    "The likeliest outcome is prolonged uncertainty or confrontation, not a clean decisive result.",
+                ],
+            },
+        ],
     }
 
 
