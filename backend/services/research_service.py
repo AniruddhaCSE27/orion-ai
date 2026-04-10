@@ -684,6 +684,8 @@ def run_research_pipeline(query: str):
             "research": writer_payload,
             "final": final_report,
         }
+        logger.info("final_response_text=%s", final_report)
+        print(f"final_response_text={final_report}")
         logger.info("final_response_keys=%s", sorted(payload.keys()))
         print(f"final_response_keys={sorted(payload.keys())}")
         return _success_payload("run_research_pipeline", payload)

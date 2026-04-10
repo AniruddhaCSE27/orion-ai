@@ -846,133 +846,16 @@ def has_user_facing_list(items):
 
 
 def fallback_answer_payload(query_type="web", user_query=""):
-    if query_type == "resume":
-        return {
-            "primary_title": "Direct Answer",
-            "recommendations": [
-                f"For {user_query or 'this resume question'}, the best-fit roles are usually the ones most clearly supported by your projects, tools, and measurable results.",
-            ],
-            "reasons_title": "Why",
-            "reasons": [
-                "Role fit is strongest where your achievements are easiest to prove.",
-                "Employers usually respond better to focused positioning than broad self-description.",
-                "Clear outcomes and ownership matter more than long generic skill lists.",
-            ],
-            "insights_title": "Key Insights",
-            "insights": "- Strong projects usually matter more than broad claims.\n- A narrower role target usually creates a stronger resume.",
-            "improvement_title": "",
-            "improvement_tips": [],
-            "extra_sections": [
-                {
-                    "title": "Conclusion",
-                    "items": [
-                        "A focused role direction will usually produce a better resume strategy than aiming everywhere at once.",
-                    ],
-                },
-            ],
-        }
-
-    if query_type == "study":
-        return {
-            "primary_title": "Direct Answer",
-            "recommendations": [
-                f"For {user_query or 'this study question'}, the clearest explanation starts with the core idea and then moves to the most important supporting points.",
-            ],
-            "reasons_title": "Why",
-            "reasons": [
-                "Students usually remember concepts better when the explanation is simple first.",
-                "Repeated themes and likely question angles matter most for revision.",
-                "Clear examples make recall easier than abstract summaries.",
-            ],
-            "insights_title": "Key Insights",
-            "insights": "- Begin with the definition and scope.\n- Then move to examples, likely questions, and revision points.",
-            "improvement_title": "",
-            "improvement_tips": [],
-            "extra_sections": [
-                {
-                    "title": "Conclusion",
-                    "items": [
-                        "A strong study answer makes the topic easier to recall and explain under pressure.",
-                    ],
-                },
-            ],
-        }
-
-    if query_type == "interview":
-        return {
-            "primary_title": "Direct Answer",
-            "recommendations": [
-                f"For {user_query or 'this interview question'}, the strongest direction is usually a concrete example that shows what you did, why you did it, and what result it produced.",
-            ],
-            "reasons_title": "Why",
-            "reasons": [
-                "Interviewers usually trust specific examples more than abstract claims.",
-                "Decision-making and trade-offs make answers feel stronger and more credible.",
-                "Clear outcomes help the answer sound real and memorable.",
-            ],
-            "insights_title": "Key Insights",
-            "insights": "- Specific examples matter more than theory.\n- Outcomes and trade-offs usually drive the strongest follow-up questions.",
-            "improvement_title": "",
-            "improvement_tips": [],
-            "extra_sections": [
-                {
-                    "title": "Conclusion",
-                    "items": [
-                        "A direct example-based answer will usually perform better than a broad textbook-style one.",
-                    ],
-                }
-            ],
-        }
-
-    if query_type == "web":
-        return {
-            "primary_title": "Direct Answer",
-            "recommendations": [
-                f"For {user_query or 'the current question'}, the most likely outcome is uncertain, but the evidence points more toward a contested or unclear result than a simple decisive one.",
-            ],
-            "reasons_title": "Why",
-            "reasons": [
-                "Current reporting does not support a simple one-sided conclusion.",
-                "Political, strategic, and external pressures usually shape the outcome together.",
-                "When certainty is limited, the clearest answer is the likeliest conclusion stated plainly.",
-            ],
-            "insights_title": "Key Insights",
-            "insights": "- A clear winner is often hard to predict in complex geopolitical conflicts.\n- External alliances and escalation risks usually matter as much as raw capability.",
-            "improvement_title": "",
-            "improvement_tips": [],
-            "extra_sections": [
-                {
-                    "title": "Conclusion",
-                    "items": [
-                        "The likeliest outcome is prolonged uncertainty or confrontation rather than a clean decisive result.",
-                    ],
-                }
-            ],
-        }
-
     return {
         "primary_title": "Direct Answer",
-        "recommendations": [
-            f"For {user_query or 'the current question'}, the most likely conclusion is uncertain but still points more toward a contested or incomplete outcome than a simple decisive one.",
-        ],
+        "recommendations": ["I couldn't find enough reliable live data for this query right now."],
         "reasons_title": "Why",
-        "reasons": [
-            "The available information is limited.",
-            "The answer stays cautious while still providing a real conclusion.",
-            "A direct answer is more useful than generic commentary.",
-        ],
+        "reasons": [],
         "insights_title": "Key Insights",
-        "insights": "- Limited evidence usually means more uncertainty.\n- A plain-language conclusion is still better than meta commentary.",
+        "insights": "",
         "improvement_title": "",
         "improvement_tips": [],
-        "extra_sections": [
-            {
-                "title": "Conclusion",
-                "items": [
-                    "The strongest fallback is still a direct answer, even when confidence is limited.",
-                ],
-            }
-        ],
+        "extra_sections": [],
     }
 
 
@@ -999,10 +882,6 @@ def normalize_answer_payload(answer_payload, query_type="general", user_query=""
 
     if not recommendations:
         recommendations = fallback["recommendations"]
-    if not reasons:
-        reasons = fallback["reasons"]
-    if not insights:
-        insights = fallback["insights"]
 
     extra_sections = []
     raw_extra_sections = answer_payload.get("extra_sections", fallback.get("extra_sections", []))

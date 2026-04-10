@@ -180,7 +180,7 @@ def _answer_addresses_query(payload, user_query: str):
         if matches >= 1:
             return True
 
-    if any(token in first_answer.lower() for token in ["likely", "unlikely", "yes", "no", "uncertain", "stalemate", "risk", "more likely"]):
+    if any(token in first_answer.lower() for token in ["likely", "unlikely", "yes", "no", "risk", "more likely"]):
         return True
 
     return False
@@ -208,7 +208,7 @@ RULES:
 - Do not give instructions on how to answer
 - Do not use generic filler
 - Do not output methodology language
-- If uncertain, provide the most likely answer and explain briefly why
+- If the evidence is limited, say so briefly and stay concrete
 - Use simple, strong, human-readable language
 
 OUTPUT FORMAT:
@@ -234,7 +234,7 @@ CONCLUSION:
             retry_block = (
                 "\nRETRY RULES:\n"
                 "- Answer the question directly in plain language. Do not describe how to answer.\n"
-                "- Start with the real conclusion, even if uncertainty remains.\n"
+                "- Start with the real conclusion and keep it specific.\n"
                 "- Avoid meta phrases such as 'the answer should', 'the response should', 'the clearest response', 'if reporting is mixed', or 'best supported by'.\n"
             )
         return [
