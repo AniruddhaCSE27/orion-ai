@@ -243,11 +243,14 @@ def _extract_sources(research_data):
 def _extract_result_content(item):
     if not isinstance(item, dict):
         return ""
+    parts = []
     for key in ("content", "raw_content", "snippet", "text"):
         value = item.get(key)
         if isinstance(value, str) and value.strip():
-            return value.strip()
-    return ""
+            cleaned = value.strip()
+            if cleaned not in parts:
+                parts.append(cleaned)
+    return "\n".join(parts).strip()
 
 
 def _source_snippet(item, limit: int = 220):
@@ -289,6 +292,47 @@ def _expanded_query(query: str, query_type: str):
     }.get(query_type, "2026 list reviews comparison")
     base = _simplify_query(query) or (query or "").strip()
     return f"{base} {suffix}".strip()
+
+
+def _is_recommendation_query(query: str):
+    lowered = (query or "").lower()
+    markers = [
+        "best tools", "top tools", "ai tools", "apps", "productivity apps",
+        "best apps", "top apps", "best websites", "top websites",
+        "for students", "for coding", "coding students", "recommend",
+    ]
+    return any(marker in lowered for marker in markers)
+
+
+def _minimum_evidence_length(query: str, query_type: str):
+    if query_type == "web" and _is_recommendation_query(query):
+        return 180
+    if query_type in {"interview", "study"}:
+        return 220
+    return 320
+
+
+def _has_usable_evidence(query: str, items, evidence_text: str, query_type: str):
+    if not items:
+        return False
+    if len(evidence_text or "") >= _minimum_evidence_length(query, query_type):
+        return True
+    query_terms = _query_terms(query)
+    for item in items[:4]:
+        haystack = " ".join(
+            [
+                item.get("title", ""),
+                item.get("content", ""),
+                item.get("text", ""),
+                item.get("url", ""),
+            ]
+        ).lower()
+        if not query_terms:
+            return True
+        matches = sum(1 for term in query_terms if term in haystack)
+        if matches >= 1:
+            return True
+    return False
 
 
 def _merge_ranked_context(query: str, query_type: str, *context_groups, limit: int = 6):
@@ -494,6 +538,8 @@ def run_research_pipeline(query: str):
             f"research_results query_used={(research_data or {}).get('query_used', '')} "
             f"result_count={len(initial_results)}"
         )
+        logger.info("retry_queries_used=%s", (research_data or {}).get("attempted_queries", []))
+        print(f"retry_queries_used={(research_data or {}).get('attempted_queries', [])}")
 
         if not initial_results:
             retry_query = _expanded_query(query, query_type)
@@ -550,7 +596,20 @@ def run_research_pipeline(query: str):
         retrieved_context = _merge_ranked_context(query, query_type, current_context, cached_context, limit=6)
 
         evidence_text = _build_evidence_text(retrieved_context)
-        if len(evidence_text) < 500:
+        evidence_minimum = _minimum_evidence_length(query, query_type)
+        evidence_usable = _has_usable_evidence(query, retrieved_context, evidence_text, query_type)
+        logger.info(
+            "evidence_check min_chars=%s evidence_chars=%s usable=%s recommendation_query=%s",
+            evidence_minimum,
+            len(evidence_text),
+            evidence_usable,
+            _is_recommendation_query(query),
+        )
+        print(
+            f"evidence_check min_chars={evidence_minimum} evidence_chars={len(evidence_text)} "
+            f"usable={evidence_usable} recommendation_query={_is_recommendation_query(query)}"
+        )
+        if not evidence_usable:
             retry_query = _expanded_query(query, query_type)
             logger.info(
                 "research_retry reason=weak_evidence evidence_chars=%s retry_query=%s",
@@ -593,6 +652,7 @@ def run_research_pipeline(query: str):
             if isinstance(retry_data, dict) and retry_data.get("results"):
                 research_data = retry_data
             evidence_text = _build_evidence_text(retrieved_context)
+            evidence_usable = _has_usable_evidence(query, retrieved_context, evidence_text, query_type)
 
         source_count = len(retrieved_context)
         logger.info("retrieved_context_count=%s evidence_chars=%s", source_count, len(evidence_text))
@@ -622,26 +682,32 @@ def run_research_pipeline(query: str):
         if writer_payload["retrieved_context"] is None:
             writer_payload["retrieved_context"] = []
 
-        try:
-            answer_payload = write(
-                plan_text,
-                writer_payload,
-                conversation_context=conversation_context,
-            )
-            logger.info("writer_call=success")
-            print("writer_call=success")
-        except Exception as exc:
-            _log_stage_failure("writer_call", exc)
-            return _error_payload(
-                "run_research_pipeline",
-                "Answer generation failed.",
-                {
-                    "stage": "writer_call",
-                    "message": str(exc),
-                    "source_count": source_count,
-                    "evidence_chars": len(evidence_text),
-                },
-            )
+        if not evidence_usable:
+            answer_payload = _fallback_answer_payload_by_type(query, query_type)
+            fallback_triggered = True
+            logger.info("fallback_triggered=no_usable_evidence")
+            print("fallback_triggered=no_usable_evidence")
+        else:
+            try:
+                answer_payload = write(
+                    plan_text,
+                    writer_payload,
+                    conversation_context=conversation_context,
+                )
+                logger.info("writer_call=success")
+                print("writer_call=success")
+            except Exception as exc:
+                _log_stage_failure("writer_call", exc)
+                return _error_payload(
+                    "run_research_pipeline",
+                    "Answer generation failed.",
+                    {
+                        "stage": "writer_call",
+                        "message": str(exc),
+                        "source_count": source_count,
+                        "evidence_chars": len(evidence_text),
+                    },
+                )
         if not isinstance(answer_payload, dict):
             answer_payload = _fallback_answer_payload_by_type(query, query_type)
             fallback_triggered = True

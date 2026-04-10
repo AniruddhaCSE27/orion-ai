@@ -33,18 +33,63 @@ def _expanded_query(query: str):
     return f"{simplified} 2026 list reviews comparison"
 
 
+def _is_recommendation_query(query: str):
+    lowered = (query or "").lower()
+    markers = [
+        "best tools", "top tools", "ai tools", "apps", "productivity apps",
+        "best apps", "top apps", "best websites", "top websites", "for students",
+        "for coding", "coding students", "recommend", "tools for",
+    ]
+    return any(marker in lowered for marker in markers)
+
+
+def _recommendation_variants(query: str):
+    lowered = (query or "").lower().strip()
+    simplified = _simplify_query(query)
+    variants = []
+
+    if "student" in lowered:
+        variants.extend(
+            [
+                f"top ai tools for students {simplified}".strip(),
+                f"best student productivity AI tools {simplified}".strip(),
+            ]
+        )
+    if "coding" in lowered or "developer" in lowered or "programming" in lowered:
+        variants.extend(
+            [
+                f"latest ai tools for coding students {simplified}".strip(),
+                f"top ai coding tools for students {simplified}".strip(),
+            ]
+        )
+    if "app" in lowered:
+        variants.append(f"best productivity apps for students {simplified}".strip())
+    if not variants:
+        variants.extend(
+            [
+                f"top {simplified} 2026 list".strip(),
+                f"best {simplified} recommendations".strip(),
+            ]
+        )
+    return variants
+
+
 def _candidate_queries(query: str, plan_text: str):
     candidates = []
-    for item in [
+    base_candidates = [
         (query or "").strip(),
         _simplify_query(query),
         _expanded_query(query),
-        f"{(query or '').strip()} {plan_text[:120].strip()}".strip(),
-    ]:
+    ]
+    if _is_recommendation_query(query):
+        base_candidates.extend(_recommendation_variants(query))
+    base_candidates.append(f"{(query or '').strip()} {plan_text[:120].strip()}".strip())
+
+    for item in base_candidates:
         cleaned = " ".join(item.split()).strip()
         if cleaned and cleaned not in candidates:
             candidates.append(cleaned)
-    return candidates[:4]
+    return candidates[:6]
 
 
 def _result_items(result):
