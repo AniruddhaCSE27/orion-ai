@@ -71,6 +71,11 @@ def _extract_bullets(block: str, limit: int = 5):
 
 
 def _build_evidence_block(evidence, limit: int = 5):
+    if isinstance(evidence, str):
+        cleaned = _clean_text(evidence)
+        if len(cleaned) > 2200:
+            cleaned = cleaned[:2200].rstrip() + "..."
+        return cleaned or "- No retrieved evidence available."
     if not evidence:
         return "- No retrieved evidence available."
     lines = []
@@ -137,7 +142,7 @@ def _fallback_answer(question: str, mode_key: str, evidence):
         ]
         conclusion = "A specific example with clear trade-offs and outcomes is usually the most persuasive direction."
     else:
-        direct_answer = f"The most likely answer to '{question}' is uncertain, but the current evidence points to a conditional outcome rather than a simple clear-cut one."
+        direct_answer = f"I couldn't find strong real-time data for '{question}'. Based on the available context, the most likely answer is a mixed or qualified outcome rather than a simple decisive one."
         why_points = [
             "Recent reporting does not support a simple one-sided conclusion.",
             "Major outcomes are usually shaped by several political and strategic pressures at once.",
@@ -242,8 +247,10 @@ def write(plan_text: str, research_data, conversation_context: str = ""):
     question = research_data.get("question") or research_data.get("user_query", "")
     mode_label = research_data.get("mode", "Web Research")
     mode_key = research_data.get("query_type", "web")
-    evidence = research_data.get("evidence") or research_data.get("retrieved_context", [])
-    evidence_block = _build_evidence_block(evidence)
+    evidence_items = research_data.get("evidence_items") or research_data.get("retrieved_context", [])
+    evidence_text = research_data.get("evidence") or ""
+    evidence_block = _build_evidence_block(evidence_text or evidence_items)
+    sources = research_data.get("sources", [])
 
     system_prompt = """You are an expert analyst.
 
@@ -293,6 +300,9 @@ CONCLUSION:
 MODE:
 {mode_label}
 
+SOURCE URLS:
+{chr(10).join(f"- {url}" for url in sources) if sources else "- No source URLs available."}
+
 PLAN:
 {plan_text}
 {context_block}
@@ -310,8 +320,8 @@ RETRIEVED EVIDENCE:
         )
         writer_response = response.choices[0].message.content
         print("WRITER OUTPUT:", writer_response)
-        parsed = _parse_writer_output(writer_response, question, mode_key, evidence)
+        parsed = _parse_writer_output(writer_response, question, mode_key, evidence_items)
         if _answer_addresses_query(parsed, question):
             return parsed
 
-    return _fallback_answer(question, mode_key, evidence)
+    return _fallback_answer(question, mode_key, evidence_items)

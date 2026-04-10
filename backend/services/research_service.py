@@ -186,7 +186,7 @@ def _build_web_documents(research_data):
     web_documents = []
     for item in research_data.get("results", []):
         title = item.get("title", "Untitled source")
-        content = item.get("content", "")
+        content = _extract_result_content(item)
         url = item.get("url", "")
         text = f"{title}\n{content}".strip()
         if not text:
@@ -228,11 +228,90 @@ def _extract_sources(research_data):
             {
                 "title": item.get("title", "Untitled source"),
                 "url": item.get("url", ""),
-                "content": item.get("content", ""),
+                "content": _extract_result_content(item),
                 "source_type": "web",
             }
         )
     return sources
+
+
+def _extract_result_content(item):
+    if not isinstance(item, dict):
+        return ""
+    for key in ("content", "raw_content", "snippet", "text"):
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _source_snippet(item, limit: int = 220):
+    content = " ".join((_extract_result_content(item) or "").split())
+    if len(content) > limit:
+        return content[:limit].rstrip() + "..."
+    return content
+
+
+def _build_evidence_text(items, limit: int = 6):
+    blocks = []
+    for item in (items or [])[:limit]:
+        title = item.get("title", "Untitled source")
+        url = item.get("url", "")
+        snippet = _source_snippet(item, limit=700)
+        if not snippet:
+            continue
+        block = f"Source: {title}"
+        if url:
+            block += f"\nURL: {url}"
+        block += f"\nEvidence: {snippet}"
+        blocks.append(block)
+    return "\n\n".join(blocks).strip()
+
+
+def _simplify_query(query: str):
+    terms = _query_terms(query)
+    if not terms:
+        return (query or "").strip()
+    return " ".join(terms[:8]).strip()
+
+
+def _expanded_query(query: str, query_type: str):
+    suffix = {
+        "resume": "role fit skills market demand",
+        "study": "summary explanation examples important points",
+        "interview": "interview questions answers examples",
+        "web": "2026 list reviews comparison",
+    }.get(query_type, "2026 list reviews comparison")
+    base = _simplify_query(query) or (query or "").strip()
+    return f"{base} {suffix}".strip()
+
+
+def _merge_ranked_context(query: str, query_type: str, *context_groups, limit: int = 6):
+    merged = []
+    seen = set()
+    for group in context_groups:
+        for item in group or []:
+            key = (
+                (item.get("url") or "").strip().lower(),
+                (item.get("title") or "").strip().lower(),
+                (_extract_result_content(item) or "").strip().lower(),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(item)
+    return _rerank_for_query(query, merged, limit=limit, mode_key=query_type)
+
+
+def _debug_sources(prefix: str, items):
+    count = len(items or [])
+    logger.info("%s source_count=%s", prefix, count)
+    print(f"{prefix} source_count={count}")
+    for index, item in enumerate((items or [])[:2], start=1):
+        snippet = _source_snippet(item, limit=180)
+        title = item.get("title", "Untitled source")
+        logger.info("%s source_%s title=%s snippet=%s", prefix, index, title, snippet)
+        print(f"{prefix} source_{index} title={title} snippet={snippet}")
 
 
 def _dedupe_sources(sources, limit: int = 6):
@@ -442,8 +521,8 @@ def _fallback_answer_payload_by_type(query: str, query_type: str):
     return {
         "primary_title": "Direct Answer",
         "recommendations": [
-            f"For {query_label}, the most likely outcome is uncertainty, prolonged tension, or a contested result rather than a simple decisive outcome.",
-            "When reporting is incomplete, the safest direct answer is the likeliest conclusion stated plainly with uncertainty noted.",
+            f"I couldn't find strong real-time data for {query_label}, so the answer below is based on the best available general context rather than strong live reporting.",
+            f"For {query_label}, the most likely outcome is still a contested or qualified result rather than a simple decisive one.",
             "Complex geopolitical or policy questions usually turn on several pressures at once instead of a single clear factor.",
         ],
         "reasons_title": "Why",
@@ -478,24 +557,76 @@ def run_research_pipeline(query: str):
         query_type = _classify_query_intent(query)
         mode = _mode_label(query_type)
 
-        logger.info("query_type=%s mode=%s", query_type, mode)
+        logger.info("research_pipeline query=%s query_type=%s mode=%s", query, query_type, mode)
+        print(f"research_pipeline query={query} query_type={query_type} mode={mode}")
         plan_text = plan(query, conversation_context=conversation_context, query_type=query_type)
-        research_data = research(plan_text)
+        research_data = research(query, plan_text=plan_text)
+        initial_results = research_data.get("results", []) if isinstance(research_data, dict) else []
+        logger.info(
+            "research_results query_used=%s result_count=%s attempted_queries=%s",
+            (research_data or {}).get("query_used", ""),
+            len(initial_results),
+            (research_data or {}).get("attempted_queries", []),
+        )
+        print(
+            f"research_results query_used={(research_data or {}).get('query_used', '')} "
+            f"result_count={len(initial_results)}"
+        )
+
+        if not initial_results:
+            retry_query = _expanded_query(query, query_type)
+            logger.info("research_retry reason=no_results retry_query=%s", retry_query)
+            print(f"research_retry reason=no_results retry_query={retry_query}")
+            research_data = research(retry_query, plan_text=plan_text)
+            initial_results = research_data.get("results", []) if isinstance(research_data, dict) else []
 
         web_store = VectorStore(namespace="web")
         web_documents = _build_web_documents(research_data)
-        web_store.add_documents(web_documents)
+        _debug_sources("tavily_results", web_documents)
+        if web_documents:
+            web_store.add_documents(web_documents)
 
         retrieval_hint = MODE_QUERY_HINTS.get(query_type, MODE_QUERY_HINTS["web"])
         retrieval_query = f"{query}\n{plan_text}\n{retrieval_hint}"
-        web_context = web_store.similarity_search(query=retrieval_query, top_k=8)
-        retrieved_context = _rerank_for_query(query, web_context, limit=6, mode_key=query_type)
+        current_context = _rerank_for_query(query, web_documents, limit=8, mode_key=query_type)
+        cached_context = web_store.similarity_search(query=retrieval_query, top_k=8)
+        retrieved_context = _merge_ranked_context(query, query_type, current_context, cached_context, limit=6)
+
+        evidence_text = _build_evidence_text(retrieved_context)
+        if len(evidence_text) < 500:
+            retry_query = _expanded_query(query, query_type)
+            logger.info(
+                "research_retry reason=weak_evidence evidence_chars=%s retry_query=%s",
+                len(evidence_text),
+                retry_query,
+            )
+            print(f"research_retry reason=weak_evidence evidence_chars={len(evidence_text)} retry_query={retry_query}")
+            retry_data = research(retry_query, plan_text=plan_text)
+            retry_documents = _build_web_documents(retry_data)
+            _debug_sources("tavily_retry_results", retry_documents)
+            if retry_documents:
+                web_store.add_documents(retry_documents)
+            retry_current = _rerank_for_query(query, retry_documents, limit=8, mode_key=query_type)
+            retry_cached = web_store.similarity_search(query=f"{retry_query}\n{retrieval_hint}", top_k=8)
+            retrieved_context = _merge_ranked_context(query, query_type, current_context, retry_current, cached_context, retry_cached, limit=6)
+            if isinstance(retry_data, dict) and retry_data.get("results"):
+                research_data = retry_data
+            evidence_text = _build_evidence_text(retrieved_context)
+
+        source_count = len(retrieved_context)
+        logger.info("retrieved_context_count=%s evidence_chars=%s", source_count, len(evidence_text))
+        print(f"retrieved_context_count={source_count} evidence_chars={len(evidence_text)}")
+        _debug_sources("retrieved_context", retrieved_context)
 
         web_sources = _dedupe_sources(retrieved_context or _extract_sources(research_data), limit=6)
         writer_payload = dict(research_data) if isinstance(research_data, dict) else {}
         writer_payload["question"] = query
         writer_payload["retrieved_context"] = retrieved_context
-        writer_payload["evidence"] = retrieved_context
+        writer_payload["evidence"] = evidence_text
+        writer_payload["evidence_items"] = retrieved_context
+        writer_payload["sources"] = [item.get("url", "") for item in web_sources if item.get("url")]
+        writer_payload["debug_source_count"] = source_count
+        writer_payload["debug_evidence_chars"] = len(evidence_text)
         writer_payload["user_query"] = query
         writer_payload["query_type"] = query_type
         writer_payload["mode"] = mode

@@ -1290,6 +1290,7 @@ if st.button("Run Research", use_container_width=False):
             research_payload = data.get("research", {})
             web_sources = data.get("web_sources", []) or data.get("sources", []) or extract_sources(research_payload)
             sources = web_sources
+            debug_source_count = data.get("research", {}).get("debug_source_count", len(web_sources))
             metrics = build_metrics(plan_text, final_text, sources)
             query_type = data.get("query_type", "web")
             mode_label = data.get("mode", "Web Research")
@@ -1350,6 +1351,7 @@ if st.button("Run Research", use_container_width=False):
                 </div>
             </div>
             """, unsafe_allow_html=True)
+            st.caption(f"DEBUG: Sources fetched = {debug_source_count}")
 
             web_sources_markdown = build_sources_markdown(web_sources, source_type="web")
             insight_items = "".join(f"<li>{item}</li>" for item in quick_insights)
