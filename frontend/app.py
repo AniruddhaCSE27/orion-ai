@@ -677,9 +677,25 @@ div[data-testid="stProgressBar"] > div > div {
 
 def safe_json(response):
     try:
-        return response.json()
-    except Exception:
-        return None
+        return response.json(), None
+    except Exception as exc:
+        return None, str(exc)
+
+
+def backend_error_message(response, data, parse_error=None):
+    status_code = getattr(response, "status_code", "unknown")
+    if isinstance(data, dict):
+        error_text = data.get("error") or data.get("message")
+        details_text = data.get("details")
+        if error_text and details_text:
+            return f"Backend HTTP {status_code}: {error_text} ({details_text})"
+        if error_text:
+            return f"Backend HTTP {status_code}: {error_text}"
+
+    if parse_error:
+        return f"Backend HTTP {status_code}: invalid JSON response. {parse_error}"
+
+    return f"Backend HTTP {status_code}: unexpected backend response."
 
 def extract_sources(research_payload):
     if not isinstance(research_payload, dict):
@@ -1268,12 +1284,16 @@ if st.button("Index Documents", use_container_width=False):
                 files=files_payload,
                 timeout=180,
             )
-            index_data = safe_json(index_response)
+            index_data, index_parse_error = safe_json(index_response)
 
-            if index_response.status_code != 200 or not index_data or not index_data.get("success", False):
-                st.error(
-                    (index_data or {}).get("error", f"Failed to index documents. HTTP {index_response.status_code}")
-                )
+            if index_data is None:
+                st.error(backend_error_message(index_response, None, index_parse_error))
+                try:
+                    st.code(index_response.text[:1500])
+                except Exception:
+                    pass
+            elif index_response.status_code != 200 or not index_data.get("success", False):
+                st.error(backend_error_message(index_response, index_data))
             else:
                 indexed_files = index_data.get("files", [])
                 summary_lines = [
@@ -1281,15 +1301,23 @@ if st.button("Index Documents", use_container_width=False):
                         f"- **{item.get('filename', 'Unknown file')}**: "
                         f"{item.get('pages_read', 0)} pages, "
                         f"{item.get('characters_extracted', 0)} characters, "
-                        f"{item.get('chunks_indexed', 0)} chunks indexed"
+                        f"{item.get('chunks_created', item.get('chunks_indexed', 0))} chunks indexed"
                     )
                     for item in indexed_files
                 ]
-                total_chunks = index_data.get("document_chunks_indexed", 0)
-                failed_files = [item for item in indexed_files if item.get("chunks_indexed", 0) == 0]
+                total_chunks = index_data.get("chunks_created", index_data.get("document_chunks_indexed", 0))
+                failed_files = [
+                    item for item in indexed_files
+                    if item.get("chunks_created", item.get("chunks_indexed", 0)) == 0
+                ]
                 panel_title = "Indexed Successfully" if total_chunks > 0 else "Document Indexing Failed"
                 panel_description = (
-                    "These files are now available for document retrieval."
+                    (
+                        f"These files are now available for document retrieval. "
+                        f"{index_data.get('pages_read', 0)} pages, "
+                        f"{index_data.get('characters_extracted', 0)} characters, "
+                        f"{index_data.get('indexed_document_count', total_chunks)} indexed chunks total."
+                    )
                     if total_chunks > 0 else
                     "PDF uploaded, but no readable text/chunks were indexed. Try another PDF or re-index."
                 )
@@ -1299,6 +1327,11 @@ if st.button("Index Documents", use_container_width=False):
                     "\n".join(summary_lines) or "- No files were indexed.",
                     panel_description,
                 )
+                if index_data.get("file_errors"):
+                    st.warning(
+                        "Some files could not be indexed: "
+                        + "; ".join(item.get("error", "Unknown indexing error") for item in index_data["file_errors"])
+                    )
                 if failed_files:
                     st.warning("Document could not be read properly")
         except requests.exceptions.ConnectionError:
@@ -1387,22 +1420,26 @@ if st.button("Run Research", use_container_width=False):
 
             progress.progress(62)
 
-            data = safe_json(response)
+            data, parse_error = safe_json(response)
 
             if data is None:
-                st.error("Backend returned invalid JSON.")
+                st.error(backend_error_message(response, None, parse_error))
+                try:
+                    st.code(response.text[:1500])
+                except Exception:
+                    pass
                 st.stop()
 
             if response.status_code != 200:
-                st.error(f"Backend HTTP error: {response.status_code}")
+                st.error(backend_error_message(response, data))
                 try:
-                    st.code(response.text)
+                    st.code(response.text[:1500])
                 except Exception:
                     pass
                 st.stop()
 
             if not data.get("success", False):
-                st.error(f"Error: {data.get('error', 'Unknown backend error')}")
+                st.error(backend_error_message(response, data))
                 st.stop()
 
             plan_text = data.get("plan", "")

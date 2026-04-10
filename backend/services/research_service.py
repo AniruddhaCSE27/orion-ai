@@ -1,10 +1,76 @@
+import logging
+import re
+from pathlib import Path
+
 from backend.agents.planner import plan
 from backend.agents.researcher import research
 from backend.agents.writer import write
-from backend.services.memory import format_history_context, save_to_memory
 from backend.services.document_ingestion import index_document
+from backend.services.memory import format_history_context, save_to_memory
 from backend.services.vector_store import VectorStore
-import re
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_detail(value):
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(key): _safe_detail(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_safe_detail(item) for item in value]
+    if isinstance(value, set):
+        return [_safe_detail(item) for item in sorted(value, key=lambda item: str(item))]
+    if hasattr(value, "item") and callable(value.item):
+        try:
+            return value.item()
+        except Exception:
+            pass
+    if hasattr(value, "model_dump") and callable(value.model_dump):
+        try:
+            return _safe_detail(value.model_dump())
+        except Exception:
+            pass
+    if hasattr(value, "dict") and callable(value.dict):
+        try:
+            return _safe_detail(value.dict())
+        except Exception:
+            pass
+    if hasattr(value, "__dict__"):
+        try:
+            return _safe_detail(vars(value))
+        except Exception:
+            pass
+    return str(value)
+
+
+def _success_payload(endpoint_name: str, payload: dict) -> dict:
+    safe_payload = _safe_detail(payload)
+    logger.info(
+        "endpoint=%s success=%s response_keys=%s",
+        endpoint_name,
+        bool(safe_payload.get("success", False)),
+        sorted(safe_payload.keys()),
+    )
+    return safe_payload
+
+
+def _error_payload(endpoint_name: str, error: str, details=None) -> dict:
+    payload = {
+        "success": False,
+        "error": error,
+    }
+    if details:
+        payload["details"] = _safe_detail(details)
+    logger.info(
+        "endpoint=%s success=%s response_keys=%s",
+        endpoint_name,
+        False,
+        sorted(payload.keys()),
+    )
+    return payload
 
 
 def _extract_sources(research_data):
@@ -610,145 +676,170 @@ def _has_resume_context(document_sources):
 
 
 def run_research_pipeline(query: str):
-    conversation_context = format_history_context(limit=5)
-    document_store = VectorStore(namespace="documents")
-    indexed_doc_chunks_count = len(document_store.documents)
-    has_indexed_documents = indexed_doc_chunks_count > 0
-    document_oriented_query = _is_document_oriented_query(query)
-    query_type = _classify_query_intent(query, has_indexed_documents)
-    mode = _mode_label(query_type)
-    has_docs = has_indexed_documents
-    if has_docs and query_type == "general":
-        query_type = "hybrid_document"
+    try:
+        conversation_context = format_history_context(limit=5)
+        document_store = VectorStore(namespace="documents")
+        indexed_doc_chunks_count = len(document_store.documents)
+        has_indexed_documents = indexed_doc_chunks_count > 0
+        document_oriented_query = _is_document_oriented_query(query)
+        query_type = _classify_query_intent(query, has_indexed_documents)
         mode = _mode_label(query_type)
-    print(f"QUERY TYPE DETECTED: {query_type}")
-    print(f"HAS DOCS: {has_docs}")
-    print(f"DOC CHUNKS COUNT: {indexed_doc_chunks_count}")
-    print(f"MODE DETECTED: {mode}")
-    plan_text = plan(query, conversation_context=conversation_context, query_type=query_type)
-    research_data = research(plan_text)
-    web_store = VectorStore(namespace="web")
-    documents = _build_documents(research_data)
-    web_store.add_documents(documents)
+        has_docs = has_indexed_documents
+        if has_docs and query_type == "general":
+            query_type = "hybrid_document"
+            mode = _mode_label(query_type)
+        print(f"QUERY TYPE DETECTED: {query_type}")
+        print(f"HAS DOCS: {has_docs}")
+        print(f"DOC CHUNKS COUNT: {indexed_doc_chunks_count}")
+        print(f"MODE DETECTED: {mode}")
+        plan_text = plan(query, conversation_context=conversation_context, query_type=query_type)
+        research_data = research(plan_text)
+        web_store = VectorStore(namespace="web")
+        documents = _build_documents(research_data)
+        web_store.add_documents(documents)
 
-    retrieval_query = f"{query}\n{plan_text}"
-    if has_indexed_documents:
-        document_query = _document_query_for_mode(query, query_type, retrieval_query)
-        document_context = document_store.similarity_search(query=document_query, top_k=8)
-        document_context = _rerank_for_query(query, document_context, limit=6, mode_key=query_type)
-        strong_document_match = _has_strong_document_match(query, document_context)
-    else:
-        document_context = []
-        strong_document_match = False
+        retrieval_query = f"{query}\n{plan_text}"
+        if has_indexed_documents:
+            document_query = _document_query_for_mode(query, query_type, retrieval_query)
+            document_context = document_store.similarity_search(query=document_query, top_k=8)
+            document_context = _rerank_for_query(query, document_context, limit=6, mode_key=query_type)
+            strong_document_match = _has_strong_document_match(query, document_context)
+        else:
+            document_context = []
+            strong_document_match = False
 
-    if query_type in {"study", "document"} and has_indexed_documents:
-        if strong_document_match:
-            web_context = web_store.similarity_search(query=query, top_k=2)
+        if query_type in {"study", "document"} and has_indexed_documents:
+            if strong_document_match:
+                web_context = web_store.similarity_search(query=query, top_k=2)
+                merged_context = _merge_retrieval_results(web_context, document_context, limit=8)
+            else:
+                web_context = []
+                merged_context = []
+        elif has_indexed_documents:
+            web_top_k = 6 if query_type == "web" else 3
+            web_query = query if query_type == "web" else retrieval_query
+            web_context = web_store.similarity_search(query=web_query, top_k=web_top_k)
             merged_context = _merge_retrieval_results(web_context, document_context, limit=8)
         else:
-            web_context = []
-            merged_context = []
-    elif has_indexed_documents:
-        web_top_k = 6 if query_type == "web" else 3
-        web_query = query if query_type == "web" else retrieval_query
-        web_context = web_store.similarity_search(query=web_query, top_k=web_top_k)
-        merged_context = _merge_retrieval_results(web_context, document_context, limit=8)
-    else:
-        web_query = query if query_type == "web" else retrieval_query
-        web_context = web_store.similarity_search(query=web_query, top_k=6 if query_type == "web" else 4)
-        merged_context = list(web_context)
+            web_query = query if query_type == "web" else retrieval_query
+            web_context = web_store.similarity_search(query=web_query, top_k=6 if query_type == "web" else 4)
+            merged_context = list(web_context)
 
-    print(f"DOCUMENT CHUNKS RETRIEVED: {len(document_context)}")
-    print(f"WEB CHUNKS RETRIEVED: {len(web_context)}")
-    print(f"DOCUMENT RETRIEVAL FOUND CHUNKS: {bool(document_context)}")
-    print(f"DOCUMENT RETRIEVAL STRONG MATCH: {strong_document_match}")
-    document_retrieval_failed = bool(has_indexed_documents and query_type in {"study", "document"} and not strong_document_match)
-    document_not_indexed = bool(document_oriented_query and not has_indexed_documents)
-    print(f"RETRIEVED DOCUMENT CHUNKS COUNT: {len(document_context)}")
-    print(f"DOCUMENT RETRIEVAL FAILED: {document_retrieval_failed}")
-    print(f"DOCUMENT NOT INDEXED: {document_not_indexed}")
+        print(f"DOCUMENT CHUNKS RETRIEVED: {len(document_context)}")
+        print(f"WEB CHUNKS RETRIEVED: {len(web_context)}")
+        print(f"DOCUMENT RETRIEVAL FOUND CHUNKS: {bool(document_context)}")
+        print(f"DOCUMENT RETRIEVAL STRONG MATCH: {strong_document_match}")
+        document_retrieval_failed = bool(has_indexed_documents and query_type in {"study", "document"} and not strong_document_match)
+        document_not_indexed = bool(document_oriented_query and not has_indexed_documents)
+        print(f"RETRIEVED DOCUMENT CHUNKS COUNT: {len(document_context)}")
+        print(f"DOCUMENT RETRIEVAL FAILED: {document_retrieval_failed}")
+        print(f"DOCUMENT NOT INDEXED: {document_not_indexed}")
 
-    retrieved_context = _rerank_for_query(query, merged_context, limit=6, mode_key=query_type)
-    retrieved_context = _prioritize_for_intent(query_type, retrieved_context)[:6]
+        retrieved_context = _rerank_for_query(query, merged_context, limit=6, mode_key=query_type)
+        retrieved_context = _prioritize_for_intent(query_type, retrieved_context)[:6]
 
-    writer_payload = dict(research_data) if isinstance(research_data, dict) else {}
-    writer_payload["retrieved_context"] = retrieved_context
-    writer_payload["user_query"] = query
-    writer_payload["query_type"] = query_type
-    writer_payload["has_document_context"] = bool(document_context)
-    writer_payload["strong_document_match"] = strong_document_match
-    writer_payload["mode"] = mode
+        writer_payload = dict(research_data) if isinstance(research_data, dict) else {}
+        writer_payload["retrieved_context"] = retrieved_context
+        writer_payload["user_query"] = query
+        writer_payload["query_type"] = query_type
+        writer_payload["has_document_context"] = bool(document_context)
+        writer_payload["strong_document_match"] = strong_document_match
+        writer_payload["mode"] = mode
 
-    web_sources = _extract_sources(research_data)
-    retrieved_web_sources, retrieved_document_sources = _split_sources_by_type(retrieved_context)
-    if document_retrieval_failed or document_not_indexed:
-        web_sources = []
-        document_sources = []
-        retrieved_context = []
-        writer_payload["retrieved_context"] = []
-    else:
-        web_sources = retrieved_web_sources or (web_sources if query_type == "web" else web_sources[:2])
-        document_sources = retrieved_document_sources
-    writer_payload["resume_query"] = query_type == "resume"
-    writer_payload["has_resume_context"] = _has_resume_context(document_sources)
+        web_sources = _extract_sources(research_data)
+        retrieved_web_sources, retrieved_document_sources = _split_sources_by_type(retrieved_context)
+        if document_retrieval_failed or document_not_indexed:
+            web_sources = []
+            document_sources = []
+            retrieved_context = []
+            writer_payload["retrieved_context"] = []
+        else:
+            web_sources = retrieved_web_sources or (web_sources if query_type == "web" else web_sources[:2])
+            document_sources = retrieved_document_sources
+        writer_payload["resume_query"] = query_type == "resume"
+        writer_payload["has_resume_context"] = _has_resume_context(document_sources)
 
-    answer_payload = write(
-        plan_text,
-        writer_payload,
-        conversation_context=conversation_context,
-    )
-    if document_retrieval_failed or document_not_indexed:
-        answer_payload = _fallback_answer_payload_by_type(query, query_type)
-        print("FALLBACK TRIGGERED: document retrieval unavailable for document-based query")
-    if not isinstance(answer_payload, dict):
-        answer_payload = _fallback_answer_payload_by_type(query, query_type)
-        print("FALLBACK TRIGGERED: writer returned non-dict payload")
-    key_findings = _make_query_focused_findings(query, retrieved_context)
-    web_sources_markdown = _build_sources_markdown(web_sources, source_type="web")
-    document_sources_markdown = _build_sources_markdown(document_sources, source_type="document")
-    final_report = _answer_payload_to_markdown(answer_payload)
-    if _contains_report_style_language(final_report) or _is_generic_response(query, final_report, query_type):
-        answer_payload = _fallback_answer_payload_by_type(query, query_type)
+        answer_payload = write(
+            plan_text,
+            writer_payload,
+            conversation_context=conversation_context,
+        )
+        if document_retrieval_failed or document_not_indexed:
+            answer_payload = _fallback_answer_payload_by_type(query, query_type)
+            print("FALLBACK TRIGGERED: document retrieval unavailable for document-based query")
+        if not isinstance(answer_payload, dict):
+            answer_payload = _fallback_answer_payload_by_type(query, query_type)
+            print("FALLBACK TRIGGERED: writer returned non-dict payload")
+        key_findings = _make_query_focused_findings(query, retrieved_context)
+        web_sources_markdown = _build_sources_markdown(web_sources, source_type="web")
+        document_sources_markdown = _build_sources_markdown(document_sources, source_type="document")
         final_report = _answer_payload_to_markdown(answer_payload)
-        print("FALLBACK TRIGGERED: generic or report-style output detected")
-    structured_response = _build_structured_response(
-        plan_text,
-        key_findings,
-        final_report,
-        web_sources_markdown,
-        document_sources_markdown,
-    )
-    save_to_memory(query, structured_response)
+        if _contains_report_style_language(final_report) or _is_generic_response(query, final_report, query_type):
+            answer_payload = _fallback_answer_payload_by_type(query, query_type)
+            final_report = _answer_payload_to_markdown(answer_payload)
+            print("FALLBACK TRIGGERED: generic or report-style output detected")
+        structured_response = _build_structured_response(
+            plan_text,
+            key_findings,
+            final_report,
+            web_sources_markdown,
+            document_sources_markdown,
+        )
+        save_to_memory(query, structured_response)
 
-    return {
-        "success": True,
-        "plan": plan_text,
-        "findings": key_findings,
-        "key_findings": key_findings,
-        "answer_payload": answer_payload,
-        "final_report": final_report,
-        "structured_response": structured_response,
-        "sources": web_sources + document_sources,
-        "web_sources": web_sources,
-        "document_sources": document_sources,
-        "query_type": query_type,
-        "mode": mode,
-        "has_indexed_documents": has_indexed_documents,
-        "doc_chunks_count": indexed_doc_chunks_count,
-        "document_retrieval_failed": document_retrieval_failed,
-        "document_not_indexed": document_not_indexed,
-        "status_message": (
-            "Document uploaded but not indexed. Please click 'Index Documents'."
-            if document_not_indexed else
-            "Document not properly indexed. Try re-indexing."
-            if document_retrieval_failed else
-            ""
-        ),
-        # Compatibility keys for the current frontend.
-        "research": writer_payload,
-        "final": final_report,
-    }
+        payload = {
+            "success": True,
+            "plan": plan_text,
+            "findings": key_findings,
+            "key_findings": key_findings,
+            "answer_payload": answer_payload,
+            "final_report": final_report,
+            "structured_response": structured_response,
+            "sources": web_sources + document_sources,
+            "web_sources": web_sources,
+            "document_sources": document_sources,
+            "query_type": query_type,
+            "mode": mode,
+            "has_indexed_documents": has_indexed_documents,
+            "doc_chunks_count": indexed_doc_chunks_count,
+            "document_retrieval_failed": document_retrieval_failed,
+            "document_not_indexed": document_not_indexed,
+            "status_message": (
+                "Document uploaded but not indexed. Please click 'Index Documents'."
+                if document_not_indexed else
+                "Document not properly indexed. Try re-indexing."
+                if document_retrieval_failed else
+                ""
+            ),
+            "research": writer_payload,
+            "final": final_report,
+        }
+        return _success_payload("run_research_pipeline", payload)
+    except Exception as exc:
+        logger.exception("endpoint=run_research_pipeline failed")
+        return _error_payload("run_research_pipeline", "Research execution failed.", str(exc))
 
 
 def index_document_file(file_path):
-    return index_document(file_path)
+    try:
+        result = index_document(file_path)
+        if not isinstance(result, dict):
+            raise TypeError("Document indexer returned a non-dict response.")
+
+        payload = {
+            "success": True,
+            "filename": str(result.get("filename", Path(file_path).name)),
+            "pages_read": int(result.get("pages_read", 0) or 0),
+            "characters_extracted": int(result.get("characters_extracted", 0) or 0),
+            "chunks_created": int(
+                result.get("chunks_created", result.get("chunks_indexed", 0)) or 0
+            ),
+            "indexed_document_count": int(
+                result.get("new_chunks_added", result.get("indexed_document_count", 0)) or 0
+            ),
+        }
+        payload["chunks_indexed"] = payload["chunks_created"]
+        return _success_payload("index_document_file", payload)
+    except Exception as exc:
+        logger.exception("endpoint=index_document_file failed for file=%s", file_path)
+        return _error_payload("index_document_file", "Document indexing failed.", str(exc))
