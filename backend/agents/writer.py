@@ -103,69 +103,16 @@ def _context_bullets(evidence, limit: int = 3):
 
 
 def _fallback_answer(question: str, mode_key: str, evidence):
-    evidence_bullets = _context_bullets(evidence, limit=3)
-
-    if mode_key == "resume":
-        direct_answer = f"The strongest role fit for '{question}' is most likely the role family that matches your clearest projects, technical depth, and measurable outcomes."
-        why_points = [
-            "Role fit is strongest where your skills and outcomes are easiest to prove.",
-            "Market demand matters, but profile evidence matters more than broad claims.",
-            "A narrower role target usually produces a much stronger resume strategy.",
-        ]
-        key_insights = evidence_bullets[:2] or [
-            "Your best projects and results should drive the recommendation.",
-            "A sharper target role usually improves resume quality and interview conversion.",
-        ]
-        conclusion = "Choose the role path where your evidence is strongest rather than aiming too broadly."
-    elif mode_key == "study":
-        direct_answer = f"For '{question}', the clearest starting point is the core concept, what it means, and the most important points connected to it."
-        why_points = [
-            "Study answers work best when they explain the topic before expanding into detail.",
-            "Repeated concepts and likely question angles matter most for revision.",
-            "Short, memorable explanations are more useful than broad summaries.",
-        ]
-        key_insights = evidence_bullets[:2] or [
-            "Start with definitions and scope before examples.",
-            "Focus on the points most likely to appear in recall-based questions.",
-        ]
-        conclusion = "The topic becomes easier to remember when reduced to the core idea, examples, and likely exam points."
-    elif mode_key == "interview":
-        direct_answer = f"For '{question}', the most convincing direction is a concrete example that shows what you did, why you chose it, and what result it produced."
-        why_points = [
-            "Interviewers trust examples more than abstract claims.",
-            "Clear ownership and decision-making make answers stronger.",
-            "Outcomes and trade-offs usually separate average answers from strong ones.",
-        ]
-        key_insights = evidence_bullets[:2] or [
-            "Specific examples are more persuasive than generic statements.",
-            "Trade-offs and results are usually the most important follow-up areas.",
-        ]
-        conclusion = "A specific example with clear trade-offs and outcomes is usually the most persuasive direction."
-    else:
-        direct_answer = f"I couldn't find strong real-time data for '{question}'. Based on the available context, the most likely answer is a mixed or qualified outcome rather than a simple decisive one."
-        why_points = [
-            "Recent reporting does not support a simple one-sided conclusion.",
-            "Major outcomes are usually shaped by several political and strategic pressures at once.",
-            "Where evidence is mixed, the safest path is to state the likeliest conclusion with clear uncertainty.",
-        ]
-        key_insights = evidence_bullets[:2] or [
-            "Mixed reporting usually means the final outcome remains uncertain.",
-            "Political constraints and external actors often matter as much as raw capability.",
-        ]
-        conclusion = "The likeliest outcome is usually a contested or uncertain one, not a simple decisive result."
-
     return {
         "primary_title": "Direct Answer",
-        "recommendations": [direct_answer],
+        "recommendations": ["I couldn't find enough reliable live data for this query right now."],
         "reasons_title": "Why",
-        "reasons": why_points[:5],
+        "reasons": [],
         "insights_title": "Key Insights",
-        "insights": "\n".join(f"- {item}" for item in key_insights[:3]),
+        "insights": "",
         "improvement_title": "",
         "improvement_tips": [],
-        "extra_sections": [
-            {"title": "Conclusion", "items": [conclusion]}
-        ],
+        "extra_sections": [],
     }
 
 

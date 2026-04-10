@@ -399,11 +399,12 @@ def _answer_payload_to_markdown(answer_payload):
     improvement_title = answer_payload.get("improvement_title", "Improvement Tips")
     extra_sections = answer_payload.get("extra_sections", [])
 
-    sections = [
-        f"## {primary_title}\n" + "\n".join(f"- {item}" for item in recommendations),
-        f"## {reasons_title}\n" + "\n".join(f"- {item}" for item in reasons),
-        f"## {insights_title}\n" + (insights or "- The retrieved context points to a cautious but usable conclusion."),
-    ]
+    sections = [f"## {primary_title}\n" + "\n".join(f"- {item}" for item in recommendations)]
+
+    if reasons:
+        sections.append(f"## {reasons_title}\n" + "\n".join(f"- {item}" for item in reasons))
+    if insights:
+        sections.append(f"## {insights_title}\n" + insights)
 
     if improvement_tips:
         sections.append(f"## {improvement_title}\n" + "\n".join(f"- {item}" for item in improvement_tips))
@@ -441,113 +442,16 @@ def _is_generic_response(query: str, final_report: str):
 
 
 def _fallback_answer_payload_by_type(query: str, query_type: str):
-    query_label = query.strip() or "the current question"
-    if query_type == "resume":
-        return {
-            "primary_title": "Direct Answer",
-            "recommendations": [
-                f"For {query_label}, the best-fit roles are usually the ones that match your strongest projects, tools, and measurable results.",
-                "The most realistic recommendations are roles where your technical depth and visible impact are easiest to prove.",
-                "If your background is broad, the better answer is usually a narrower role target instead of an all-purpose job search.",
-            ],
-            "reasons_title": "Why",
-            "reasons": [
-                "Hiring decisions usually favor resumes that show clear ownership and outcomes.",
-                "A focused role target makes it easier to connect your experience to market demand.",
-                "Specific projects and metrics usually matter more than broad skill lists.",
-            ],
-            "insights_title": "Key Insights",
-            "insights": "- The strongest roles are usually the ones your experience already supports with evidence.\n- Tighter positioning usually leads to better resume decisions and better applications.",
-            "improvement_title": "",
-            "improvement_tips": [],
-            "extra_sections": [
-                {
-                    "title": "Conclusion",
-                    "items": [
-                        "A focused role direction is more likely to help than a broad, catch-all resume strategy.",
-                    ],
-                },
-            ],
-        }
-    if query_type == "study":
-        return {
-            "primary_title": "Direct Answer",
-            "recommendations": [
-                f"For {query_label}, the clearest answer starts with the main concept and the most important points needed to understand it.",
-                "The clearest explanation usually makes the idea simple first and then adds the key details.",
-                "If the topic is broad, the best next step is to break it into subtopics or likely exam questions.",
-            ],
-            "reasons_title": "Why",
-            "reasons": [
-                "Students usually retain the topic better when the main idea is explained before the details.",
-                "Cause-effect links and examples make revision faster and easier.",
-                "A clear explanation is more useful than a dense summary.",
-            ],
-            "insights_title": "Key Insights",
-            "insights": "- Start with the definition or core idea.\n- Then connect it to examples, likely questions, or revision points.",
-            "improvement_title": "",
-            "improvement_tips": [],
-            "extra_sections": [
-                {
-                    "title": "Conclusion",
-                    "items": [
-                        "The best study answer makes the topic easier to remember, explain, and revise under time pressure.",
-                    ],
-                },
-            ],
-        }
-    if query_type == "interview":
-        return {
-            "primary_title": "Direct Answer",
-            "recommendations": [
-                f"For {query_label}, the strongest direction is usually a specific example that shows what you did and what result it produced.",
-                "The strongest responses are concrete, practical, and easy to say aloud in a real interview.",
-                "Interviewers are most likely to push on trade-offs, decisions, and measurable impact.",
-            ],
-            "reasons_title": "Why",
-            "reasons": [
-                "Specific examples sound more credible than abstract claims.",
-                "Decision-making and trade-offs help interview answers feel real.",
-                "Clear outcomes make the answer easier to remember and defend.",
-            ],
-            "insights_title": "Key Insights",
-            "insights": "- One strong project story usually matters more than several vague examples.\n- Interview follow-ups often focus on ownership, trade-offs, and measurable outcomes.",
-            "improvement_title": "",
-            "improvement_tips": [],
-            "extra_sections": [
-                {
-                    "title": "Conclusion",
-                    "items": [
-                        "A direct example-based answer is usually the safest and strongest interview response.",
-                    ],
-                },
-            ],
-        }
     return {
         "primary_title": "Direct Answer",
-        "recommendations": [
-            f"I couldn't find strong real-time data for {query_label}, so the answer below is based on the best available general context rather than strong live reporting.",
-            f"For {query_label}, the most likely outcome is still a contested or qualified result rather than a simple decisive one.",
-            "Complex geopolitical or policy questions usually turn on several pressures at once instead of a single clear factor.",
-        ],
+        "recommendations": ["I couldn't find enough reliable live data for this query right now."],
         "reasons_title": "Why",
-        "reasons": [
-            "Current reporting rarely supports a simple one-sided conclusion in complex live situations.",
-            "External alliances, political pressure, and escalation risk often shape the outcome together.",
-            "A practical answer is more useful than vague commentary when the evidence is mixed.",
-        ],
+        "reasons": [],
         "insights_title": "Key Insights",
-        "insights": "- A clear winner is often hard to predict in complex geopolitical conflicts.\n- Capability, alliances, and external intervention usually matter together.",
+        "insights": "",
         "improvement_title": "",
         "improvement_tips": [],
-        "extra_sections": [
-            {
-                "title": "Conclusion",
-                "items": [
-                    "The likeliest outcome is prolonged uncertainty or confrontation, not a clean decisive result.",
-                ],
-            },
-        ],
+        "extra_sections": [],
     }
 
 
@@ -558,6 +462,7 @@ def _has_resume_context(query: str, conversation_context: str):
 
 def run_research_pipeline(query: str):
     try:
+        fallback_triggered = False
         logger.info("incoming_query=%s", query)
         print(f"incoming_query={query}")
         conversation_context = format_history_context(limit=5)
@@ -693,6 +598,8 @@ def run_research_pipeline(query: str):
         logger.info("retrieved_context_count=%s evidence_chars=%s", source_count, len(evidence_text))
         print(f"retrieved_context_count={source_count} evidence_chars={len(evidence_text)}")
         _debug_sources("retrieved_context", retrieved_context)
+        logger.info("debug query=%s sources_fetched_count=%s evidence_length=%s fallback_triggered=%s", query, source_count, len(evidence_text), fallback_triggered)
+        print(f"debug query={query} sources_fetched_count={source_count} evidence_length={len(evidence_text)} fallback_triggered={fallback_triggered}")
 
         web_sources = _dedupe_sources(retrieved_context or _extract_sources(research_data), limit=6)
         writer_payload = dict(research_data) if isinstance(research_data, dict) else {}
@@ -707,6 +614,8 @@ def run_research_pipeline(query: str):
         writer_payload["query_type"] = query_type
         writer_payload["mode"] = mode
         writer_payload["has_resume_context"] = _has_resume_context(query, conversation_context)
+        logger.info("writer_input source_count=%s evidence_length=%s", len(writer_payload["sources"]), len(writer_payload["evidence"]))
+        print(f"writer_input source_count={len(writer_payload['sources'])} evidence_length={len(writer_payload['evidence'])}")
 
         if writer_payload["evidence"] is None:
             writer_payload["evidence"] = ""
@@ -735,6 +644,7 @@ def run_research_pipeline(query: str):
             )
         if not isinstance(answer_payload, dict):
             answer_payload = _fallback_answer_payload_by_type(query, query_type)
+            fallback_triggered = True
             logger.info("fallback_triggered=writer_non_dict")
 
         key_findings = _build_key_findings(query, retrieved_context)
@@ -742,7 +652,11 @@ def run_research_pipeline(query: str):
         if _contains_report_style_language(final_report) or _is_generic_response(query, final_report):
             answer_payload = _fallback_answer_payload_by_type(query, query_type)
             final_report = _answer_payload_to_markdown(answer_payload)
+            fallback_triggered = True
             logger.info("fallback_triggered=generic_or_report_style")
+
+        logger.info("debug query=%s sources_fetched_count=%s evidence_length=%s fallback_triggered=%s", query, source_count, len(evidence_text), fallback_triggered)
+        print(f"debug query={query} sources_fetched_count={source_count} evidence_length={len(evidence_text)} fallback_triggered={fallback_triggered}")
 
         sources_markdown = _build_sources_markdown(web_sources)
         structured_response = _build_structured_response(
@@ -766,6 +680,7 @@ def run_research_pipeline(query: str):
             "query_type": query_type,
             "mode": mode,
             "memory_used": bool(conversation_context),
+            "fallback_triggered": fallback_triggered,
             "research": writer_payload,
             "final": final_report,
         }
