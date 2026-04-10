@@ -114,6 +114,11 @@ def _error_payload(endpoint_name: str, error: str, details=None) -> dict:
     return payload
 
 
+def _log_stage_failure(stage: str, exc: Exception):
+    logger.exception("research_stage=%s failed", stage)
+    print(f"research_stage={stage} failed error={exc}")
+
+
 def _query_terms(query: str):
     terms = re.findall(r"[a-zA-Z0-9]+", (query or "").lower())
     stopwords = {
@@ -553,6 +558,8 @@ def _has_resume_context(query: str, conversation_context: str):
 
 def run_research_pipeline(query: str):
     try:
+        logger.info("incoming_query=%s", query)
+        print(f"incoming_query={query}")
         conversation_context = format_history_context(limit=5)
         query_type = _classify_query_intent(query)
         mode = _mode_label(query_type)
@@ -560,7 +567,17 @@ def run_research_pipeline(query: str):
         logger.info("research_pipeline query=%s query_type=%s mode=%s", query, query_type, mode)
         print(f"research_pipeline query={query} query_type={query_type} mode={mode}")
         plan_text = plan(query, conversation_context=conversation_context, query_type=query_type)
-        research_data = research(query, plan_text=plan_text)
+
+        try:
+            research_data = research(query, plan_text=plan_text)
+        except Exception as exc:
+            _log_stage_failure("tavily_search", exc)
+            return _error_payload(
+                "run_research_pipeline",
+                "Live search failed.",
+                {"stage": "tavily_search", "message": str(exc)},
+            )
+
         initial_results = research_data.get("results", []) if isinstance(research_data, dict) else []
         logger.info(
             "research_results query_used=%s result_count=%s attempted_queries=%s",
@@ -577,19 +594,54 @@ def run_research_pipeline(query: str):
             retry_query = _expanded_query(query, query_type)
             logger.info("research_retry reason=no_results retry_query=%s", retry_query)
             print(f"research_retry reason=no_results retry_query={retry_query}")
-            research_data = research(retry_query, plan_text=plan_text)
+            try:
+                research_data = research(retry_query, plan_text=plan_text)
+            except Exception as exc:
+                _log_stage_failure("tavily_retry_search", exc)
+                return _error_payload(
+                    "run_research_pipeline",
+                    "Live search retry failed.",
+                    {"stage": "tavily_retry_search", "message": str(exc)},
+                )
             initial_results = research_data.get("results", []) if isinstance(research_data, dict) else []
 
-        web_store = VectorStore(namespace="web")
+        try:
+            web_store = VectorStore(namespace="web")
+        except Exception as exc:
+            _log_stage_failure("vector_store_init", exc)
+            return _error_payload(
+                "run_research_pipeline",
+                "Evidence store initialization failed.",
+                {"stage": "vector_store_init", "message": str(exc)},
+            )
+
         web_documents = _build_web_documents(research_data)
         _debug_sources("tavily_results", web_documents)
-        if web_documents:
-            web_store.add_documents(web_documents)
+        logger.info("tavily_response_count=%s", len(web_documents))
+        print(f"tavily_response_count={len(web_documents)}")
+        try:
+            if web_documents:
+                web_store.add_documents(web_documents)
+        except Exception as exc:
+            _log_stage_failure("vector_store_add_documents", exc)
+            return _error_payload(
+                "run_research_pipeline",
+                "Evidence indexing failed.",
+                {"stage": "vector_store_add_documents", "message": str(exc)},
+            )
 
         retrieval_hint = MODE_QUERY_HINTS.get(query_type, MODE_QUERY_HINTS["web"])
         retrieval_query = f"{query}\n{plan_text}\n{retrieval_hint}"
         current_context = _rerank_for_query(query, web_documents, limit=8, mode_key=query_type)
-        cached_context = web_store.similarity_search(query=retrieval_query, top_k=8)
+        try:
+            cached_context = web_store.similarity_search(query=retrieval_query, top_k=8)
+        except Exception as exc:
+            _log_stage_failure("vector_store_similarity_search", exc)
+            return _error_payload(
+                "run_research_pipeline",
+                "Evidence retrieval failed.",
+                {"stage": "vector_store_similarity_search", "message": str(exc)},
+            )
         retrieved_context = _merge_ranked_context(query, query_type, current_context, cached_context, limit=6)
 
         evidence_text = _build_evidence_text(retrieved_context)
@@ -601,13 +653,37 @@ def run_research_pipeline(query: str):
                 retry_query,
             )
             print(f"research_retry reason=weak_evidence evidence_chars={len(evidence_text)} retry_query={retry_query}")
-            retry_data = research(retry_query, plan_text=plan_text)
+            try:
+                retry_data = research(retry_query, plan_text=plan_text)
+            except Exception as exc:
+                _log_stage_failure("tavily_weak_evidence_retry", exc)
+                return _error_payload(
+                    "run_research_pipeline",
+                    "Live search retry failed after weak evidence.",
+                    {"stage": "tavily_weak_evidence_retry", "message": str(exc)},
+                )
             retry_documents = _build_web_documents(retry_data)
             _debug_sources("tavily_retry_results", retry_documents)
-            if retry_documents:
-                web_store.add_documents(retry_documents)
+            try:
+                if retry_documents:
+                    web_store.add_documents(retry_documents)
+            except Exception as exc:
+                _log_stage_failure("vector_store_add_retry_documents", exc)
+                return _error_payload(
+                    "run_research_pipeline",
+                    "Evidence indexing failed during retry.",
+                    {"stage": "vector_store_add_retry_documents", "message": str(exc)},
+                )
             retry_current = _rerank_for_query(query, retry_documents, limit=8, mode_key=query_type)
-            retry_cached = web_store.similarity_search(query=f"{retry_query}\n{retrieval_hint}", top_k=8)
+            try:
+                retry_cached = web_store.similarity_search(query=f"{retry_query}\n{retrieval_hint}", top_k=8)
+            except Exception as exc:
+                _log_stage_failure("vector_store_retry_similarity_search", exc)
+                return _error_payload(
+                    "run_research_pipeline",
+                    "Evidence retrieval failed during retry.",
+                    {"stage": "vector_store_retry_similarity_search", "message": str(exc)},
+                )
             retrieved_context = _merge_ranked_context(query, query_type, current_context, retry_current, cached_context, retry_cached, limit=6)
             if isinstance(retry_data, dict) and retry_data.get("results"):
                 research_data = retry_data
@@ -632,11 +708,31 @@ def run_research_pipeline(query: str):
         writer_payload["mode"] = mode
         writer_payload["has_resume_context"] = _has_resume_context(query, conversation_context)
 
-        answer_payload = write(
-            plan_text,
-            writer_payload,
-            conversation_context=conversation_context,
-        )
+        if writer_payload["evidence"] is None:
+            writer_payload["evidence"] = ""
+        if writer_payload["retrieved_context"] is None:
+            writer_payload["retrieved_context"] = []
+
+        try:
+            answer_payload = write(
+                plan_text,
+                writer_payload,
+                conversation_context=conversation_context,
+            )
+            logger.info("writer_call=success")
+            print("writer_call=success")
+        except Exception as exc:
+            _log_stage_failure("writer_call", exc)
+            return _error_payload(
+                "run_research_pipeline",
+                "Answer generation failed.",
+                {
+                    "stage": "writer_call",
+                    "message": str(exc),
+                    "source_count": source_count,
+                    "evidence_chars": len(evidence_text),
+                },
+            )
         if not isinstance(answer_payload, dict):
             answer_payload = _fallback_answer_payload_by_type(query, query_type)
             logger.info("fallback_triggered=writer_non_dict")
@@ -673,6 +769,8 @@ def run_research_pipeline(query: str):
             "research": writer_payload,
             "final": final_report,
         }
+        logger.info("final_response_keys=%s", sorted(payload.keys()))
+        print(f"final_response_keys={sorted(payload.keys())}")
         return _success_payload("run_research_pipeline", payload)
     except Exception as exc:
         logger.exception("endpoint=run_research_pipeline failed")

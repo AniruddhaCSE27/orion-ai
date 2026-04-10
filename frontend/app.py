@@ -1261,18 +1261,18 @@ if st.button("Run Research", use_container_width=False):
 
             progress.progress(62)
 
-            data, parse_error = safe_json(response)
-
-            if data is None:
-                st.error(backend_error_message(response, None, parse_error))
+            if response.status_code != 200:
+                st.error(f"Backend HTTP {response.status_code}: Backend unavailable or crashed.")
                 try:
                     st.code(response.text[:1500])
                 except Exception:
                     pass
                 st.stop()
 
-            if response.status_code != 200:
-                st.error(backend_error_message(response, data))
+            data, parse_error = safe_json(response)
+
+            if data is None:
+                st.error(backend_error_message(response, None, parse_error))
                 try:
                     st.code(response.text[:1500])
                 except Exception:

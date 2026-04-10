@@ -34,15 +34,42 @@ def _json_response(endpoint_name: str, payload: dict, status_code: int = 200) ->
 
 @router.get("/")
 def home():
-    return _json_response(
-        "home",
-        {
-            "success": True,
-            "status": "Backend is running",
-            "product": "ORION AI",
-            "capabilities": ["web_rag", "memory", "multi_agent"],
-        },
-    )
+    try:
+        return _json_response(
+            "home",
+            {
+                "success": True,
+                "status": "Backend is running",
+                "product": "ORION AI",
+                "capabilities": ["web_rag", "memory", "multi_agent"],
+            },
+        )
+    except Exception as exc:
+        logger.exception("endpoint=home failed")
+        return _json_response(
+            "home",
+            _error_payload("Backend status check failed.", str(exc)),
+            status_code=500,
+        )
+
+
+@router.get("/health")
+def health():
+    try:
+        return _json_response(
+            "health",
+            {
+                "success": True,
+                "status": "ok",
+            },
+        )
+    except Exception as exc:
+        logger.exception("endpoint=health failed")
+        return _json_response(
+            "health",
+            _error_payload("Health check failed.", str(exc)),
+            status_code=500,
+        )
 
 
 @router.post("/research")
