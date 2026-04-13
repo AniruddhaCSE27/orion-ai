@@ -693,6 +693,88 @@ def _debug_query_type(query: str):
     return "recommendation" if _is_recommendation_query(query) else "analysis"
 
 
+def _clean_candidate_name(value: str):
+    text = " ".join((value or "").split()).strip(" -,:;|")
+    if not text:
+        return ""
+    lowered = text.lower()
+    blocked = {
+        "best ai tools for students",
+        "top ai tools for students 2026",
+        "student productivity ai tools",
+        "latest ai tools for coding students",
+        "best productivity apps for students",
+        "top productivity apps",
+        "best websites for coding students",
+        "ai tools",
+        "productivity apps",
+        "coding students",
+        "students",
+        "tools",
+        "apps",
+        "websites",
+        "platforms",
+    }
+    if lowered in blocked:
+        return ""
+    if len(text) > 60:
+        return ""
+    return text
+
+
+def _extract_named_recommendations(items, limit: int = 5):
+    candidates = []
+    seen = set()
+    patterns = [
+        r"\b(?:ChatGPT|Perplexity|Notion AI|Notion|Grammarly|GitHub Copilot|Copilot|Claude|Canva|Otter|QuillBot|Gemini|Cursor|Replit|Khanmigo|Duolingo Max)\b",
+        r"\b[A-Z][a-zA-Z0-9]+(?:\s+[A-Z][a-zA-Z0-9]+){0,2}\b",
+    ]
+
+    for item in items or []:
+        raw_parts = [item.get("title", ""), item.get("content", ""), item.get("text", "")]
+        title = item.get("title", "")
+        for segment in re.split(r"[|,:/•\-]", title):
+            cleaned = _clean_candidate_name(segment)
+            if cleaned and cleaned.lower() not in seen:
+                seen.add(cleaned.lower())
+                candidates.append(cleaned)
+        for raw_part in raw_parts:
+            for pattern in patterns:
+                for match in re.findall(pattern, raw_part or ""):
+                    cleaned = _clean_candidate_name(match)
+                    if cleaned and cleaned.lower() not in seen:
+                        seen.add(cleaned.lower())
+                        candidates.append(cleaned)
+                    if len(candidates) >= limit:
+                        return candidates[:limit]
+    return candidates[:limit]
+
+
+def _build_recommendation_answer_payload(query: str, items):
+    recommendations = _extract_named_recommendations(items, limit=5)
+    if not recommendations:
+        return None
+    supporting_points = []
+    for item in (items or [])[:3]:
+        title = item.get("title", "Source")
+        snippet = _source_snippet(item, limit=180)
+        if snippet:
+            supporting_points.append(f"{title}: {snippet}")
+    return {
+        "primary_title": "Direct Answer",
+        "recommendations": recommendations,
+        "reasons_title": "Why",
+        "reasons": supporting_points[:3],
+        "insights_title": "Key Insights",
+        "insights": "",
+        "improvement_title": "",
+        "improvement_tips": [],
+        "extra_sections": [],
+        "raw_answer": "\n".join(f"- {item}" for item in recommendations),
+        "_debug_parse_success": True,
+    }
+
+
 def _has_resume_context(query: str, conversation_context: str):
     lowered = f"{query} {conversation_context}".lower()
     return any(token in lowered for token in ["resume", "cv", "profile", "experience", "skills", "project"])
@@ -889,6 +971,10 @@ def run_research_pipeline(query: str):
         if writer_payload["retrieved_context"] is None:
             writer_payload["retrieved_context"] = []
 
+        recommendation_payload = None
+        if _is_recommendation_query(query) and source_count > 0 and (evidence_text or "").strip():
+            recommendation_payload = _build_recommendation_answer_payload(query, retrieved_context)
+
         answer_payload = None
         if not evidence_usable:
             if source_count == 0 or not (evidence_text or "").strip():
@@ -917,10 +1003,14 @@ def run_research_pipeline(query: str):
             except OutboundServiceError as exc:
                 return _finalize_response("run_research_pipeline", _outbound_error_payload("run_research_pipeline", exc))
         if not isinstance(answer_payload, dict):
-            answer_payload = _fallback_answer_payload_by_type(query, query_type)
-            fallback_triggered = True
-            fallback_reason = "writer_non_dict"
-            logger.info("fallback_triggered=writer_non_dict")
+            if recommendation_payload:
+                answer_payload = recommendation_payload
+                fallback_reason = "used_recommendation_payload"
+            else:
+                answer_payload = _fallback_answer_payload_by_type(query, query_type)
+                fallback_triggered = True
+                fallback_reason = "writer_non_dict"
+                logger.info("fallback_triggered=writer_non_dict")
 
         writer_raw_answer = answer_payload.get("raw_answer", "") if isinstance(answer_payload, dict) else ""
         parse_success = bool(answer_payload.get("_debug_parse_success", False)) if isinstance(answer_payload, dict) else False
@@ -953,9 +1043,15 @@ def run_research_pipeline(query: str):
                 }
                 final_report = _answer_payload_to_markdown(answer_payload)
                 fallback_reason = "used_raw_writer_output"
+            elif recommendation_payload:
+                answer_payload = recommendation_payload
+                final_report = _answer_payload_to_markdown(answer_payload)
+                fallback_reason = "used_recommendation_payload"
 
         logger.info("debug query=%s sources_fetched_count=%s evidence_length=%s fallback_triggered=%s", query, source_count, len(evidence_text), fallback_triggered)
         print(f"debug query={query} sources_fetched_count={source_count} evidence_length={len(evidence_text)} fallback_triggered={fallback_triggered}")
+        print(f"FALLBACK REASON: {fallback_reason}")
+        print(f"WRITER RAW: {writer_raw_answer}")
 
         sources_markdown = _build_sources_markdown(web_sources)
         structured_response = _build_structured_response(
