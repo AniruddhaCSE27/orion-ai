@@ -1230,9 +1230,6 @@ if st.button("Run Research", use_container_width=False):
                 st.error(backend_error_message(response, data))
                 st.stop()
 
-            print("DEBUG FINAL RESPONSE:", data)
-            st.write("DEBUG:", data)
-
             plan_text = data.get("plan", "")
             findings_text = data.get("key_findings", data.get("findings", ""))
             render_answer = select_render_answer(data)
@@ -1317,8 +1314,6 @@ if st.button("Run Research", use_container_width=False):
                 </div>
             </div>
             """, unsafe_allow_html=True)
-            st.caption(f"DEBUG: Sources fetched = {debug_source_count}")
-
             web_sources_markdown = build_sources_markdown(web_sources, source_type="web")
             insight_items = "".join(f"<li>{item}</li>" for item in quick_insights)
             st.markdown(f"""
@@ -1403,6 +1398,6 @@ if st.button("Run Research", use_container_width=False):
         except requests.exceptions.ConnectionError:
             st.error("Could not connect to backend. Check your Render URL.")
         except Exception as e:
-            st.error(f"Unexpected error: {e}")
+                st.error("Could not fetch response from ORION backend.")
 
 st.markdown("<div class='footer'>✨ Built by Aniruddha Pathak</div>", unsafe_allow_html=True)
