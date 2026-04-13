@@ -1,6 +1,7 @@
 import logging
 import re
 import time
+import traceback
 from pathlib import Path
 
 from backend.agents.planner import plan
@@ -113,6 +114,51 @@ def _error_payload(endpoint_name: str, error: str, details=None) -> dict:
         sorted(payload.keys()),
     )
     return payload
+
+
+def _ensure_string(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(_safe_detail(value))
+
+
+def _finalize_response(endpoint_name: str, response):
+    if response is None:
+        response = {"success": False, "error": "Empty response"}
+    if not isinstance(response, dict):
+        response = {
+            "success": False,
+            "error": "Invalid response",
+            "debug_exception": _ensure_string(response),
+        }
+
+    safe_response = _safe_detail(response)
+    if not isinstance(safe_response, dict):
+        safe_response = {
+            "success": False,
+            "error": "Invalid response",
+            "debug_exception": _ensure_string(safe_response),
+        }
+
+    safe_response["success"] = bool(safe_response.get("success", False))
+    if safe_response["success"]:
+        final_answer = _ensure_string(safe_response.get("final_report") or safe_response.get("final") or safe_response.get("raw_answer"))
+        if final_answer:
+            safe_response.setdefault("answer", final_answer)
+        else:
+            safe_response["success"] = False
+            safe_response["error"] = "Empty response"
+            safe_response["answer"] = ""
+    else:
+        safe_response["error"] = _ensure_string(safe_response.get("error") or "Internal server error")
+
+    safe_response["raw_answer"] = _ensure_string(safe_response.get("raw_answer"))
+    safe_response.setdefault("answer", _ensure_string(safe_response.get("answer")))
+    print(f"FINAL RESPONSE: {safe_response}")
+    logger.info("endpoint=%s finalized_response_keys=%s", endpoint_name, sorted(safe_response.keys()))
+    return safe_response
 
 
 class OutboundServiceError(RuntimeError):
@@ -678,7 +724,7 @@ def run_research_pipeline(query: str):
                 service_hint="OPENAI",
             )
         except OutboundServiceError as exc:
-            return _outbound_error_payload("run_research_pipeline", exc)
+            return _finalize_response("run_research_pipeline", _outbound_error_payload("run_research_pipeline", exc))
 
         try:
             research_data, tavily_retry_count = _call_with_retries(
@@ -687,7 +733,7 @@ def run_research_pipeline(query: str):
                 service_hint="TAVILY",
             )
         except OutboundServiceError as exc:
-            return _outbound_error_payload("run_research_pipeline", exc)
+            return _finalize_response("run_research_pipeline", _outbound_error_payload("run_research_pipeline", exc))
 
         initial_results = research_data.get("results", []) if isinstance(research_data, dict) else []
         logger.info(
@@ -715,7 +761,7 @@ def run_research_pipeline(query: str):
                     service_hint="TAVILY",
                 )
             except OutboundServiceError as exc:
-                return _outbound_error_payload("run_research_pipeline", exc)
+                return _finalize_response("run_research_pipeline", _outbound_error_payload("run_research_pipeline", exc))
             initial_results = research_data.get("results", []) if isinstance(research_data, dict) else []
             _debug_raw_tavily_results("tavily_no_result_retry", research_data)
 
@@ -723,11 +769,11 @@ def run_research_pipeline(query: str):
             web_store = VectorStore(namespace="web")
         except Exception as exc:
             _log_stage_failure("vector_store_init", exc)
-            return _error_payload(
+            return _finalize_response("run_research_pipeline", _error_payload(
                 "run_research_pipeline",
                 "Evidence store initialization failed.",
                 {"stage": "vector_store_init", "message": _sanitize_exception_message(exc)},
-            )
+            ))
 
         web_documents = _build_web_documents(research_data)
         _debug_sources("tavily_results", web_documents)
@@ -741,7 +787,7 @@ def run_research_pipeline(query: str):
                     service_hint="OPENAI",
                 )
         except OutboundServiceError as exc:
-            return _outbound_error_payload("run_research_pipeline", exc)
+            return _finalize_response("run_research_pipeline", _outbound_error_payload("run_research_pipeline", exc))
 
         retrieval_hint = MODE_QUERY_HINTS.get(query_type, MODE_QUERY_HINTS["web"])
         retrieval_query = f"{query}\n{plan_text}\n{retrieval_hint}"
@@ -753,7 +799,7 @@ def run_research_pipeline(query: str):
                 service_hint="OPENAI",
             )
         except OutboundServiceError as exc:
-            return _outbound_error_payload("run_research_pipeline", exc)
+            return _finalize_response("run_research_pipeline", _outbound_error_payload("run_research_pipeline", exc))
         retrieved_context = _merge_ranked_context(query, query_type, current_context, cached_context, limit=6)
 
         evidence_text = _build_evidence_text(retrieved_context)
@@ -785,7 +831,7 @@ def run_research_pipeline(query: str):
                     service_hint="TAVILY",
                 )
             except OutboundServiceError as exc:
-                return _outbound_error_payload("run_research_pipeline", exc)
+                return _finalize_response("run_research_pipeline", _outbound_error_payload("run_research_pipeline", exc))
             _debug_raw_tavily_results("tavily_weak_evidence_retry", retry_data)
             retry_documents = _build_web_documents(retry_data)
             _debug_sources("tavily_retry_results", retry_documents)
@@ -797,7 +843,7 @@ def run_research_pipeline(query: str):
                         service_hint="OPENAI",
                     )
             except OutboundServiceError as exc:
-                return _outbound_error_payload("run_research_pipeline", exc)
+                return _finalize_response("run_research_pipeline", _outbound_error_payload("run_research_pipeline", exc))
             retry_current = _rerank_for_query(query, retry_documents, limit=8, mode_key=query_type)
             try:
                 retry_cached, embedding_retry_count = _call_with_retries(
@@ -806,7 +852,7 @@ def run_research_pipeline(query: str):
                     service_hint="OPENAI",
                 )
             except OutboundServiceError as exc:
-                return _outbound_error_payload("run_research_pipeline", exc)
+                return _finalize_response("run_research_pipeline", _outbound_error_payload("run_research_pipeline", exc))
             retrieved_context = _merge_ranked_context(query, query_type, current_context, retry_current, cached_context, retry_cached, limit=6)
             if isinstance(retry_data, dict) and retry_data.get("results"):
                 research_data = retry_data
@@ -869,7 +915,7 @@ def run_research_pipeline(query: str):
                 logger.info("writer_raw_present=%s parse_success=%s", bool(answer_payload.get("raw_answer")), bool(answer_payload.get("_debug_parse_success", False)))
                 print(f"writer_raw_present={bool(answer_payload.get('raw_answer'))} parse_success={bool(answer_payload.get('_debug_parse_success', False))}")
             except OutboundServiceError as exc:
-                return _outbound_error_payload("run_research_pipeline", exc)
+                return _finalize_response("run_research_pipeline", _outbound_error_payload("run_research_pipeline", exc))
         if not isinstance(answer_payload, dict):
             answer_payload = _fallback_answer_payload_by_type(query, query_type)
             fallback_triggered = True
@@ -952,7 +998,17 @@ def run_research_pipeline(query: str):
         print(f"final_response_text={final_report}")
         logger.info("final_response_keys=%s", sorted(payload.keys()))
         print(f"final_response_keys={sorted(payload.keys())}")
-        return _success_payload("run_research_pipeline", payload)
+        return _finalize_response("run_research_pipeline", _success_payload("run_research_pipeline", payload))
     except Exception as exc:
+        error_trace = traceback.format_exc()
         logger.exception("endpoint=run_research_pipeline failed")
-        return _error_payload("run_research_pipeline", "Research execution failed.", str(exc))
+        print(f"ERROR TRACE: {error_trace}")
+        return _finalize_response(
+            "run_research_pipeline",
+            {
+                "success": False,
+                "error": "Internal server error",
+                "debug_exception": _sanitize_exception_message(exc),
+                "details": {"traceback": error_trace},
+            },
+        )
