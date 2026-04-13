@@ -79,6 +79,37 @@ def _extract_bullets(block: str, limit: int = 5):
     return [item for item in bullets if item][:limit]
 
 
+def _extract_meaningful_lines(text: str, limit: int = 5):
+    items = []
+    for line in (text or "").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        lowered = stripped.lower().rstrip(":")
+        if lowered in {"direct answer", "final answer", "why", "key insights", "key points", "evidence", "conclusion"}:
+            continue
+        if stripped.startswith(("- ", "* ")):
+            stripped = stripped[2:].strip()
+        items.append(stripped)
+        if len(items) >= limit:
+            break
+    return items
+
+
+def _extract_fallback_direct_answer(text: str, limit: int = 5):
+    bullets = _extract_bullets(text, limit=limit)
+    if bullets:
+        return bullets
+    lines = _extract_meaningful_lines(text, limit=limit)
+    if lines:
+        return lines
+    paragraphs = [part.strip() for part in re.split(r"\n\s*\n", text or "") if part.strip()]
+    if paragraphs:
+        return [paragraphs[0]]
+    cleaned = _clean_text(text)
+    return [cleaned] if cleaned else []
+
+
 def _build_evidence_block(evidence, limit: int = 5):
     if isinstance(evidence, str):
         cleaned = _clean_text(evidence)
@@ -135,7 +166,26 @@ def _parse_writer_output(text: str, question: str, mode_key: str, evidence):
     conclusion = _clean_text(_extract_section_block(text, "CONCLUSION"))
 
     if not direct_answer:
-        return _fallback_answer(question, mode_key, evidence)
+        fallback_recommendations = _extract_fallback_direct_answer(text, limit=5)
+        if not fallback_recommendations:
+            return {
+                **_fallback_answer(question, mode_key, evidence),
+                "raw_answer": _clean_text(text),
+                "_debug_parse_success": False,
+            }
+        return {
+            "primary_title": "Direct Answer",
+            "recommendations": fallback_recommendations,
+            "reasons_title": "Why",
+            "reasons": why_points or _context_bullets(evidence, limit=3),
+            "insights_title": "Key Insights",
+            "insights": "\n".join(f"- {item}" for item in (key_points or evidence_points or _context_bullets(evidence, limit=2))),
+            "improvement_title": "",
+            "improvement_tips": [],
+            "extra_sections": [{"title": "Conclusion", "items": [conclusion or fallback_recommendations[0]]}],
+            "raw_answer": _clean_text(text),
+            "_debug_parse_success": True,
+        }
 
     return {
         "primary_title": "Direct Answer",
@@ -147,6 +197,8 @@ def _parse_writer_output(text: str, question: str, mode_key: str, evidence):
         "improvement_title": "",
         "improvement_tips": [],
         "extra_sections": [{"title": "Conclusion", "items": [conclusion or direct_answer]}],
+        "raw_answer": _clean_text(text),
+        "_debug_parse_success": True,
     }
 
 
@@ -295,9 +347,14 @@ RETRIEVED EVIDENCE:
             messages=_messages(strict_retry=attempt == 1),
         )
         writer_response = response.choices[0].message.content
+        print("WRITER RAW OUTPUT:", writer_response)
         print("WRITER OUTPUT:", writer_response)
         parsed = _parse_writer_output(writer_response, question, mode_key, evidence_items)
+        print("WRITER PARSED OUTPUT:", parsed)
         if _answer_addresses_query(parsed, question):
             return parsed
 
-    return _fallback_answer(question, mode_key, evidence_items)
+    fallback_payload = _fallback_answer(question, mode_key, evidence_items)
+    fallback_payload["raw_answer"] = _clean_text(writer_response or "")
+    fallback_payload["_debug_parse_success"] = False
+    return fallback_payload

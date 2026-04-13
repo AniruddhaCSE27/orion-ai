@@ -1,6 +1,6 @@
 # LLM Code Review Assistant
 
-LLM Code Review Assistant is a CLI-first AI developer tool that reviews GitHub pull requests using a hybrid pipeline:
+LLM Code Review Assistant is a CLI-first AI developer tool that reviews GitHub pull requests using a hybrid pipeline. It also includes a deployment-ready Streamlit interface powered by the same reviewer factory used by the CLI.
 
 - GitHub API ingestion for PR metadata and changed files
 - unified diff parsing for line-level grounding
@@ -8,6 +8,7 @@ LLM Code Review Assistant is a CLI-first AI developer tool that reviews GitHub p
 - rule-based heuristics for trusted pre-LLM review comments
 - OpenAI reasoning for prioritization, synthesis, and clearer explanations
 - Rich terminal output plus Markdown and JSON reporting
+- Streamlit UI for hosted PR review workflows
 
 The project is intentionally designed to look and feel like a credible internal engineering tool rather than a prompt-only demo.
 
@@ -27,7 +28,7 @@ That design makes the tool easier to explain in interviews and more believable a
 
 ### High-Level Flow
 
-`CLI -> Config -> GitHubClient -> DiffParser -> ASTAnalyzer -> RuleBasedReviewer -> ReviewEngine -> ReportFormatter`
+`CLI / Streamlit -> Shared Reviewer Factory -> GitHubClient -> DiffParser -> ASTAnalyzer -> RuleBasedReviewer -> ReviewEngine -> ReportFormatter`
 
 ### Module Responsibilities
 
@@ -47,14 +48,18 @@ That design makes the tool easier to explain in interviews and more believable a
   Calls the OpenAI API, validates structured output, filters hallucinated files and line references, and falls back to deterministic findings when needed.
 - `app/reviewer.py`
   Orchestrates the full review pipeline.
+- `app/factory.py`
+  Centralizes reviewer dependency wiring so CLI and Streamlit use the exact same pipeline.
 - `app/report_formatter.py`
   Produces Markdown, JSON, optional file exports, and Rich terminal rendering.
 - `app/schemas.py`
   Defines Pydantic models for diffs, AST evidence, review context, and final review output.
+- `streamlit_app.py`
+  Streamlit entrypoint for reviewing PRs in a browser with JSON and Markdown downloads.
 
 ## Hybrid Review Pipeline
 
-1. The CLI receives `owner`, `repo`, and `pr`.
+1. The CLI or Streamlit UI receives `owner`, `repo`, and `pr`.
 2. GitHub ingestion fetches PR metadata and changed files.
 3. Diff parsing extracts changed line ranges for grounding.
 4. AST analysis runs on changed Python files with retrievable contents.
@@ -137,6 +142,60 @@ Disable Rich rendering:
 python run.py --owner psf --repo requests --pr 6710 --no-rich
 ```
 
+## Streamlit Usage
+
+Run locally:
+
+```bash
+streamlit run streamlit_app.py
+```
+
+The Streamlit app supports:
+
+- owner, repo, and PR number input
+- GitHub PR URL parsing
+- review summary and findings
+- empty-state message when no significant issues are found in changed lines
+- JSON and Markdown downloads
+
+The UI is still grounded by the same strict diff-aware reviewer pipeline used by the CLI.
+
+## Deployment
+
+### Streamlit Community Cloud
+
+1. Push this project to GitHub.
+2. In Streamlit Community Cloud, create a new app from the repository.
+3. Set the entrypoint to:
+
+```text
+streamlit_app.py
+```
+
+4. Add these secrets or environment variables:
+
+- `OPENAI_API_KEY`
+- `GITHUB_TOKEN`
+- `OPENAI_MODEL`
+
+Optional:
+
+- `GITHUB_API_BASE_URL`
+- `REQUEST_TIMEOUT_SECONDS`
+- `MAX_FILES_FOR_REVIEW`
+
+The app reads standard environment variables and also maps Streamlit secrets into environment variables at startup, so no code changes are needed for hosted deployment.
+
+### Local Environment Example
+
+Copy `.env.example` to `.env` and populate:
+
+```bash
+OPENAI_API_KEY=your_openai_api_key
+GITHUB_TOKEN=your_github_token
+OPENAI_MODEL=gpt-4.1-mini
+```
+
 ## Sample Output
 
 Terminal and Markdown summary:
@@ -192,6 +251,13 @@ Run the full test suite:
 
 ```bash
 pytest tests
+```
+
+Quick validation checks:
+
+```bash
+python run.py --help
+streamlit run streamlit_app.py
 ```
 
 Coverage includes:

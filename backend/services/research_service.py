@@ -736,6 +736,8 @@ def run_research_pipeline(query: str):
                 )
                 logger.info("writer_call=success")
                 print("writer_call=success")
+                logger.info("writer_raw_present=%s parse_success=%s", bool(answer_payload.get("raw_answer")), bool(answer_payload.get("_debug_parse_success", False)))
+                print(f"writer_raw_present={bool(answer_payload.get('raw_answer'))} parse_success={bool(answer_payload.get('_debug_parse_success', False))}")
             except Exception as exc:
                 _log_stage_failure("writer_call", exc)
                 return _error_payload(
@@ -754,15 +756,37 @@ def run_research_pipeline(query: str):
             fallback_reason = "writer_non_dict"
             logger.info("fallback_triggered=writer_non_dict")
 
+        writer_raw_answer = answer_payload.get("raw_answer", "") if isinstance(answer_payload, dict) else ""
+        parse_success = bool(answer_payload.get("_debug_parse_success", False)) if isinstance(answer_payload, dict) else False
+        logger.info("parsed_answer_payload=%s", answer_payload)
+        print(f"parsed_answer_payload={answer_payload}")
+
         key_findings = _build_key_findings(query, retrieved_context)
         final_report = _answer_payload_to_markdown(answer_payload)
         if _contains_report_style_language(final_report) or _is_generic_response(query, final_report):
+            raw_writer_usable = bool(writer_raw_answer and writer_raw_answer.strip())
             if source_count == 0 or not (evidence_text or "").strip():
                 answer_payload = _fallback_answer_payload_by_type(query, query_type)
                 final_report = _answer_payload_to_markdown(answer_payload)
                 fallback_triggered = True
                 fallback_reason = "generic_or_report_style"
                 logger.info("fallback_triggered=generic_or_report_style")
+            elif raw_writer_usable:
+                answer_payload = {
+                    "primary_title": "Direct Answer",
+                    "recommendations": [writer_raw_answer],
+                    "reasons_title": "Why",
+                    "reasons": [],
+                    "insights_title": "Key Insights",
+                    "insights": "",
+                    "improvement_title": "",
+                    "improvement_tips": [],
+                    "extra_sections": [],
+                    "raw_answer": writer_raw_answer,
+                    "_debug_parse_success": False,
+                }
+                final_report = _answer_payload_to_markdown(answer_payload)
+                fallback_reason = "used_raw_writer_output"
 
         logger.info("debug query=%s sources_fetched_count=%s evidence_length=%s fallback_triggered=%s", query, source_count, len(evidence_text), fallback_triggered)
         print(f"debug query={query} sources_fetched_count={source_count} evidence_length={len(evidence_text)} fallback_triggered={fallback_triggered}")
@@ -793,8 +817,11 @@ def run_research_pipeline(query: str):
             "debug_source_count": source_count,
             "debug_evidence_length": len(evidence_text),
             "debug_query_type": _debug_query_type(query),
+            "debug_writer_raw_present": bool(writer_raw_answer and writer_raw_answer.strip()),
+            "debug_parse_success": parse_success,
             "debug_fallback_reason": fallback_reason,
             "debug_retry_used": (research_data or {}).get("attempted_queries", []),
+            "raw_answer": writer_raw_answer,
             "research": writer_payload,
             "final": final_report,
         }

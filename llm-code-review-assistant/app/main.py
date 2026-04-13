@@ -8,14 +8,9 @@ try:
 except ImportError:  # pragma: no cover - exercised via runtime fallback
     Console = None  # type: ignore[assignment]
 
-from app.ast_analyzer import ASTAnalyzer
-from app.config import get_settings
-from app.diff_parser import DiffParser
-from app.github_client import GitHubClient, GitHubClientError
-from app.report_formatter import ReportFormatter
-from app.review_engine import ReviewEngine
-from app.reviewer import Reviewer
-from app.rule_engine import RuleBasedReviewer
+    from app.config import get_settings
+    from app.factory import create_reviewer
+    from app.github_client import GitHubClientError
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
@@ -43,16 +38,9 @@ def main() -> None:
             error_console.print(f"[red]Configuration error:[/red] {exc}")
         raise SystemExit(1) from exc
 
-    report_formatter = ReportFormatter()
-    github_client = GitHubClient(settings)
-    reviewer = Reviewer(
-        github_client=github_client,
-        diff_parser=DiffParser(),
-        ast_analyzer=ASTAnalyzer(settings.thresholds),
-        rule_based_reviewer=RuleBasedReviewer(),
-        review_engine=ReviewEngine(settings),
-        report_formatter=report_formatter,
-    )
+    services = create_reviewer(settings)
+    report_formatter = services.report_formatter
+    reviewer = services.reviewer
 
     try:
         markdown_report, json_result = reviewer.review_pull_request(args.owner, args.repo, args.pr)
@@ -63,7 +51,7 @@ def main() -> None:
             error_console.print(f"[red]Runtime error:[/red] {exc}")
         raise SystemExit(1) from exc
     finally:
-        github_client.close()
+        services.close()
 
     report_formatter.save_outputs(
         json_result,

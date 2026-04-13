@@ -875,13 +875,15 @@ def normalize_answer_payload(answer_payload, query_type="general", user_query=""
     ][:5]
     insights = answer_payload.get("insights", "")
     insights = insights.strip() if isinstance(insights, str) else ""
+    raw_answer = answer_payload.get("raw_answer", "")
+    raw_answer = raw_answer.strip() if isinstance(raw_answer, str) else ""
     improvement_tips = [
         item.strip() for item in answer_payload.get("improvement_tips", [])
         if isinstance(item, str) and item.strip()
     ][:5]
 
     if not recommendations:
-        recommendations = fallback["recommendations"]
+        recommendations = [raw_answer] if raw_answer else fallback["recommendations"]
 
     extra_sections = []
     raw_extra_sections = answer_payload.get("extra_sections", fallback.get("extra_sections", []))
@@ -908,6 +910,7 @@ def normalize_answer_payload(answer_payload, query_type="general", user_query=""
         "improvement_title": answer_payload.get("improvement_title", fallback["improvement_title"]),
         "improvement_tips": improvement_tips or fallback.get("improvement_tips", []),
         "extra_sections": extra_sections,
+        "raw_answer": raw_answer,
     }
 
 def build_chart():
