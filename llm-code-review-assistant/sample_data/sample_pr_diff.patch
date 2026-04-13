@@ -1,0 +1,22 @@
+diff --git a/app/service.py b/app/service.py
+index 1111111..2222222 100644
+--- a/app/service.py
++++ b/app/service.py
+@@ -1,6 +1,18 @@
+ def process_payment(user_id, amount, currency, retries, timeout, metadata):
+-    return charge(user_id, amount)
++    total = 0
++    for attempt in range(retries):
++        try:
++            if amount > 0:
++                if currency == "USD":
++                    if timeout > 10:
++                        total += amount
++                    else:
++                        total += amount - 1
++            else:
++                total += 0
++        except:
++            total += 0
++
++    return charge(user_id, total)
