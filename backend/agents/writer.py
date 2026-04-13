@@ -344,6 +344,7 @@ RETRIEVED EVIDENCE:
     for attempt in range(2):
         response = client.chat.completions.create(
             model=config.MODEL_NAME,
+            timeout=config.OPENAI_TIMEOUT_SECONDS,
             messages=_messages(strict_retry=attempt == 1),
         )
         writer_response = response.choices[0].message.content

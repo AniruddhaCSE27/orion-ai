@@ -55,6 +55,7 @@ class VectorStore:
         response = self.client.embeddings.create(
             model=self.embedding_model,
             input=texts,
+            timeout=config.OPENAI_TIMEOUT_SECONDS,
         )
         vectors = [item.embedding for item in response.data]
         embeddings = np.array(vectors, dtype="float32")

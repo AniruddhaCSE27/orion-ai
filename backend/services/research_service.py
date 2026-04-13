@@ -1,5 +1,6 @@
 import logging
 import re
+import time
 from pathlib import Path
 
 from backend.agents.planner import plan
@@ -112,6 +113,124 @@ def _error_payload(endpoint_name: str, error: str, details=None) -> dict:
         sorted(payload.keys()),
     )
     return payload
+
+
+class OutboundServiceError(RuntimeError):
+    def __init__(self, message: str, failed_service: str, exception_type: str, retry_count: int):
+        super().__init__(message)
+        self.failed_service = failed_service
+        self.exception_type = exception_type
+        self.retry_count = retry_count
+
+
+def _sanitize_exception_message(exc: Exception) -> str:
+    message = " ".join(str(exc).split()).strip()
+    if "connection reset by peer" in message.lower():
+        return "Connection reset by peer."
+    if "connection aborted" in message.lower():
+        return "Connection aborted by remote host."
+    return message or exc.__class__.__name__
+
+
+def _classify_outbound_failure(exc: Exception, service_hint: str):
+    exception_type = exc.__class__.__name__
+    lowered = f"{exception_type} {_sanitize_exception_message(exc)}".lower()
+    normalized_service = service_hint.upper()
+
+    if "connection reset" in lowered or "connection aborted" in lowered:
+        code = f"{normalized_service}_CONNECTION_RESET"
+        if normalized_service == "TAVILY":
+            user_error = "Live search failed temporarily. Please try again."
+            public_error = "Tavily connection reset"
+        elif normalized_service == "OPENAI":
+            user_error = "Answer generation failed temporarily. Please try again."
+            public_error = "OpenAI connection reset"
+        else:
+            user_error = "Network request failed temporarily. Please try again."
+            public_error = "Request connection reset"
+    elif "timeout" in lowered:
+        code = "REQUEST_TIMEOUT"
+        if normalized_service == "TAVILY":
+            user_error = "Live search failed temporarily. Please try again."
+            public_error = "Tavily request timeout"
+        elif normalized_service == "OPENAI":
+            user_error = "Answer generation failed temporarily. Please try again."
+            public_error = "OpenAI request timeout"
+        else:
+            user_error = "Request timed out. Please try again."
+            public_error = "Request timeout"
+    else:
+        code = "REQUEST_EXCEPTION"
+        if normalized_service == "TAVILY":
+            user_error = "Live search failed temporarily. Please try again."
+            public_error = "Tavily request failed"
+        elif normalized_service == "OPENAI":
+            user_error = "Answer generation failed temporarily. Please try again."
+            public_error = "OpenAI request failed"
+        else:
+            user_error = "Request failed temporarily. Please try again."
+            public_error = "Request exception"
+
+    return {
+        "code": code,
+        "failed_service": normalized_service,
+        "exception_type": exception_type,
+        "user_error": user_error,
+        "public_error": public_error,
+        "details": _sanitize_exception_message(exc),
+    }
+
+
+def _call_with_retries(operation, *, stage: str, service_hint: str, retries: int = 2, backoff_seconds: float = 0.5):
+    last_failure = None
+    for attempt in range(retries + 1):
+        try:
+            return operation(), attempt
+        except Exception as exc:
+            failure = _classify_outbound_failure(exc, service_hint)
+            last_failure = failure
+            logger.exception(
+                "outbound_failure code=%s stage=%s failed_service=%s exception_type=%s retry_count=%s",
+                failure["code"],
+                stage,
+                failure["failed_service"],
+                failure["exception_type"],
+                attempt,
+            )
+            print(
+                f"outbound_failure code={failure['code']} stage={stage} failed_service={failure['failed_service']} "
+                f"exception_type={failure['exception_type']} retry_count={attempt}"
+            )
+            if attempt >= retries:
+                raise OutboundServiceError(
+                    failure["public_error"],
+                    failed_service=failure["failed_service"],
+                    exception_type=failure["exception_type"],
+                    retry_count=attempt,
+                ) from exc
+            time.sleep(backoff_seconds * (attempt + 1))
+    raise OutboundServiceError(
+        last_failure["public_error"] if last_failure else "Request failed",
+        failed_service=last_failure["failed_service"] if last_failure else service_hint.upper(),
+        exception_type=last_failure["exception_type"] if last_failure else "RuntimeError",
+        retry_count=retries,
+    )
+
+
+def _outbound_error_payload(endpoint_name: str, exc: OutboundServiceError) -> dict:
+    return _error_payload(
+        endpoint_name,
+        str(exc),
+        details={
+            "debug_failed_service": exc.failed_service,
+            "debug_exception_type": exc.exception_type,
+            "debug_retry_count": exc.retry_count,
+        },
+    ) | {
+        "debug_failed_service": exc.failed_service,
+        "debug_exception_type": exc.exception_type,
+        "debug_retry_count": exc.retry_count,
+    }
 
 
 def _log_stage_failure(stage: str, exc: Exception):
@@ -537,6 +656,13 @@ def run_research_pipeline(query: str):
     try:
         fallback_triggered = False
         fallback_reason = ""
+        debug_failed_service = ""
+        debug_exception_type = ""
+        debug_retry_count = 0
+        plan_retry_count = 0
+        tavily_retry_count = 0
+        embedding_retry_count = 0
+        writer_retry_count = 0
         logger.info("incoming_query=%s", query)
         print(f"incoming_query={query}")
         conversation_context = format_history_context(limit=5)
@@ -545,17 +671,23 @@ def run_research_pipeline(query: str):
 
         logger.info("research_pipeline query=%s query_type=%s mode=%s", query, query_type, mode)
         print(f"research_pipeline query={query} query_type={query_type} mode={mode}")
-        plan_text = plan(query, conversation_context=conversation_context, query_type=query_type)
+        try:
+            plan_text, plan_retry_count = _call_with_retries(
+                lambda: plan(query, conversation_context=conversation_context, query_type=query_type),
+                stage="planner_call",
+                service_hint="OPENAI",
+            )
+        except OutboundServiceError as exc:
+            return _outbound_error_payload("run_research_pipeline", exc)
 
         try:
-            research_data = research(query, plan_text=plan_text)
-        except Exception as exc:
-            _log_stage_failure("tavily_search", exc)
-            return _error_payload(
-                "run_research_pipeline",
-                "Live search failed.",
-                {"stage": "tavily_search", "message": str(exc)},
+            research_data, tavily_retry_count = _call_with_retries(
+                lambda: research(query, plan_text=plan_text),
+                stage="tavily_search",
+                service_hint="TAVILY",
             )
+        except OutboundServiceError as exc:
+            return _outbound_error_payload("run_research_pipeline", exc)
 
         initial_results = research_data.get("results", []) if isinstance(research_data, dict) else []
         logger.info(
@@ -577,14 +709,13 @@ def run_research_pipeline(query: str):
             logger.info("research_retry reason=no_results retry_query=%s", retry_query)
             print(f"research_retry reason=no_results retry_query={retry_query}")
             try:
-                research_data = research(retry_query, plan_text=plan_text)
-            except Exception as exc:
-                _log_stage_failure("tavily_retry_search", exc)
-                return _error_payload(
-                    "run_research_pipeline",
-                    "Live search retry failed.",
-                    {"stage": "tavily_retry_search", "message": str(exc)},
+                research_data, tavily_retry_count = _call_with_retries(
+                    lambda: research(retry_query, plan_text=plan_text),
+                    stage="tavily_retry_search",
+                    service_hint="TAVILY",
                 )
+            except OutboundServiceError as exc:
+                return _outbound_error_payload("run_research_pipeline", exc)
             initial_results = research_data.get("results", []) if isinstance(research_data, dict) else []
             _debug_raw_tavily_results("tavily_no_result_retry", research_data)
 
@@ -595,7 +726,7 @@ def run_research_pipeline(query: str):
             return _error_payload(
                 "run_research_pipeline",
                 "Evidence store initialization failed.",
-                {"stage": "vector_store_init", "message": str(exc)},
+                {"stage": "vector_store_init", "message": _sanitize_exception_message(exc)},
             )
 
         web_documents = _build_web_documents(research_data)
@@ -604,27 +735,25 @@ def run_research_pipeline(query: str):
         print(f"tavily_response_count={len(web_documents)}")
         try:
             if web_documents:
-                web_store.add_documents(web_documents)
-        except Exception as exc:
-            _log_stage_failure("vector_store_add_documents", exc)
-            return _error_payload(
-                "run_research_pipeline",
-                "Evidence indexing failed.",
-                {"stage": "vector_store_add_documents", "message": str(exc)},
-            )
+                _, embedding_retry_count = _call_with_retries(
+                    lambda: web_store.add_documents(web_documents),
+                    stage="vector_store_add_documents",
+                    service_hint="OPENAI",
+                )
+        except OutboundServiceError as exc:
+            return _outbound_error_payload("run_research_pipeline", exc)
 
         retrieval_hint = MODE_QUERY_HINTS.get(query_type, MODE_QUERY_HINTS["web"])
         retrieval_query = f"{query}\n{plan_text}\n{retrieval_hint}"
         current_context = _rerank_for_query(query, web_documents, limit=8, mode_key=query_type)
         try:
-            cached_context = web_store.similarity_search(query=retrieval_query, top_k=8)
-        except Exception as exc:
-            _log_stage_failure("vector_store_similarity_search", exc)
-            return _error_payload(
-                "run_research_pipeline",
-                "Evidence retrieval failed.",
-                {"stage": "vector_store_similarity_search", "message": str(exc)},
+            cached_context, embedding_retry_count = _call_with_retries(
+                lambda: web_store.similarity_search(query=retrieval_query, top_k=8),
+                stage="vector_store_similarity_search",
+                service_hint="OPENAI",
             )
+        except OutboundServiceError as exc:
+            return _outbound_error_payload("run_research_pipeline", exc)
         retrieved_context = _merge_ranked_context(query, query_type, current_context, cached_context, limit=6)
 
         evidence_text = _build_evidence_text(retrieved_context)
@@ -650,37 +779,34 @@ def run_research_pipeline(query: str):
             )
             print(f"research_retry reason=weak_evidence evidence_chars={len(evidence_text)} retry_query={retry_query}")
             try:
-                retry_data = research(retry_query, plan_text=plan_text)
-            except Exception as exc:
-                _log_stage_failure("tavily_weak_evidence_retry", exc)
-                return _error_payload(
-                    "run_research_pipeline",
-                    "Live search retry failed after weak evidence.",
-                    {"stage": "tavily_weak_evidence_retry", "message": str(exc)},
+                retry_data, tavily_retry_count = _call_with_retries(
+                    lambda: research(retry_query, plan_text=plan_text),
+                    stage="tavily_weak_evidence_retry",
+                    service_hint="TAVILY",
                 )
+            except OutboundServiceError as exc:
+                return _outbound_error_payload("run_research_pipeline", exc)
             _debug_raw_tavily_results("tavily_weak_evidence_retry", retry_data)
             retry_documents = _build_web_documents(retry_data)
             _debug_sources("tavily_retry_results", retry_documents)
             try:
                 if retry_documents:
-                    web_store.add_documents(retry_documents)
-            except Exception as exc:
-                _log_stage_failure("vector_store_add_retry_documents", exc)
-                return _error_payload(
-                    "run_research_pipeline",
-                    "Evidence indexing failed during retry.",
-                    {"stage": "vector_store_add_retry_documents", "message": str(exc)},
-                )
+                    _, embedding_retry_count = _call_with_retries(
+                        lambda: web_store.add_documents(retry_documents),
+                        stage="vector_store_add_retry_documents",
+                        service_hint="OPENAI",
+                    )
+            except OutboundServiceError as exc:
+                return _outbound_error_payload("run_research_pipeline", exc)
             retry_current = _rerank_for_query(query, retry_documents, limit=8, mode_key=query_type)
             try:
-                retry_cached = web_store.similarity_search(query=f"{retry_query}\n{retrieval_hint}", top_k=8)
-            except Exception as exc:
-                _log_stage_failure("vector_store_retry_similarity_search", exc)
-                return _error_payload(
-                    "run_research_pipeline",
-                    "Evidence retrieval failed during retry.",
-                    {"stage": "vector_store_retry_similarity_search", "message": str(exc)},
+                retry_cached, embedding_retry_count = _call_with_retries(
+                    lambda: web_store.similarity_search(query=f"{retry_query}\n{retrieval_hint}", top_k=8),
+                    stage="vector_store_retry_similarity_search",
+                    service_hint="OPENAI",
                 )
+            except OutboundServiceError as exc:
+                return _outbound_error_payload("run_research_pipeline", exc)
             retrieved_context = _merge_ranked_context(query, query_type, current_context, retry_current, cached_context, retry_cached, limit=6)
             if isinstance(retry_data, dict) and retry_data.get("results"):
                 research_data = retry_data
@@ -729,27 +855,21 @@ def run_research_pipeline(query: str):
                 evidence_usable = True
         if evidence_usable and answer_payload is None:
             try:
-                answer_payload = write(
-                    plan_text,
-                    writer_payload,
-                    conversation_context=conversation_context,
+                answer_payload, writer_retry_count = _call_with_retries(
+                    lambda: write(
+                        plan_text,
+                        writer_payload,
+                        conversation_context=conversation_context,
+                    ),
+                    stage="writer_call",
+                    service_hint="OPENAI",
                 )
                 logger.info("writer_call=success")
                 print("writer_call=success")
                 logger.info("writer_raw_present=%s parse_success=%s", bool(answer_payload.get("raw_answer")), bool(answer_payload.get("_debug_parse_success", False)))
                 print(f"writer_raw_present={bool(answer_payload.get('raw_answer'))} parse_success={bool(answer_payload.get('_debug_parse_success', False))}")
-            except Exception as exc:
-                _log_stage_failure("writer_call", exc)
-                return _error_payload(
-                    "run_research_pipeline",
-                    "Answer generation failed.",
-                    {
-                        "stage": "writer_call",
-                        "message": str(exc),
-                        "source_count": source_count,
-                        "evidence_chars": len(evidence_text),
-                    },
-                )
+            except OutboundServiceError as exc:
+                return _outbound_error_payload("run_research_pipeline", exc)
         if not isinstance(answer_payload, dict):
             answer_payload = _fallback_answer_payload_by_type(query, query_type)
             fallback_triggered = True
@@ -820,6 +940,9 @@ def run_research_pipeline(query: str):
             "debug_writer_raw_present": bool(writer_raw_answer and writer_raw_answer.strip()),
             "debug_parse_success": parse_success,
             "debug_fallback_reason": fallback_reason,
+            "debug_failed_service": debug_failed_service,
+            "debug_exception_type": debug_exception_type,
+            "debug_retry_count": max(plan_retry_count, tavily_retry_count, embedding_retry_count, writer_retry_count, debug_retry_count),
             "debug_retry_used": (research_data or {}).get("attempted_queries", []),
             "raw_answer": writer_raw_answer,
             "research": writer_payload,

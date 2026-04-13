@@ -10,6 +10,7 @@ class Config:
     TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
     MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
     EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+    OPENAI_TIMEOUT_SECONDS = float(os.getenv("OPENAI_TIMEOUT_SECONDS", "30"))
 
 
 config = Config()

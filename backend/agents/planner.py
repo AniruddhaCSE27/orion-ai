@@ -22,6 +22,7 @@ def plan(query: str, conversation_context: str = "", query_type: str = "web"):
 
     response = client.chat.completions.create(
         model=config.MODEL_NAME,
+        timeout=config.OPENAI_TIMEOUT_SECONDS,
         messages=[
             {
                 "role": "system",
