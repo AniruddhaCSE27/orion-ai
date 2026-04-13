@@ -262,16 +262,17 @@ def _source_snippet(item, limit: int = 220):
 
 def _build_evidence_text(items, limit: int = 6):
     blocks = []
+    limit = 5 if limit > 5 else limit
     for item in (items or [])[:limit]:
         title = item.get("title", "Untitled source")
         url = item.get("url", "")
         snippet = _source_snippet(item, limit=700)
         if not snippet:
             continue
-        block = f"Source: {title}"
+        block = f"Title: {title}"
+        block += f"\nSnippet: {snippet}"
         if url:
             block += f"\nURL: {url}"
-        block += f"\nEvidence: {snippet}"
         blocks.append(block)
     return "\n\n".join(blocks).strip()
 
@@ -306,7 +307,7 @@ def _is_recommendation_query(query: str):
 
 def _minimum_evidence_length(query: str, query_type: str):
     if query_type == "web" and _is_recommendation_query(query):
-        return 180
+        return 80
     if query_type in {"interview", "study"}:
         return 220
     return 320
@@ -315,6 +316,15 @@ def _minimum_evidence_length(query: str, query_type: str):
 def _has_usable_evidence(query: str, items, evidence_text: str, query_type: str):
     if not items:
         return False
+    if _is_recommendation_query(query):
+        non_empty_items = 0
+        for item in items[:5]:
+            title = (item.get("title") or "").strip()
+            content = (_extract_result_content(item) or "").strip()
+            if title or content:
+                non_empty_items += 1
+        if non_empty_items >= 2 and (evidence_text or "").strip():
+            return True
     if len(evidence_text or "") >= _minimum_evidence_length(query, query_type):
         return True
     query_terms = _query_terms(query)
@@ -488,6 +498,10 @@ def _contains_report_style_language(text: str):
 def _is_generic_response(query: str, final_report: str):
     query_terms = _query_terms(query)
     report_lower = (final_report or "").lower()
+    if _is_recommendation_query(query):
+        bullet_count = sum(1 for line in (final_report or "").splitlines() if line.strip().startswith("- "))
+        if bullet_count >= 3 and not any(phrase in report_lower for phrase in GENERIC_META_PHRASES):
+            return False
     if not query_terms:
         return any(phrase in report_lower for phrase in GENERIC_META_PHRASES)
     if any(phrase in report_lower for phrase in GENERIC_META_PHRASES):
@@ -510,6 +524,10 @@ def _fallback_answer_payload_by_type(query: str, query_type: str):
     }
 
 
+def _debug_query_type(query: str):
+    return "recommendation" if _is_recommendation_query(query) else "analysis"
+
+
 def _has_resume_context(query: str, conversation_context: str):
     lowered = f"{query} {conversation_context}".lower()
     return any(token in lowered for token in ["resume", "cv", "profile", "experience", "skills", "project"])
@@ -518,6 +536,7 @@ def _has_resume_context(query: str, conversation_context: str):
 def run_research_pipeline(query: str):
     try:
         fallback_triggered = False
+        fallback_reason = ""
         logger.info("incoming_query=%s", query)
         print(f"incoming_query={query}")
         conversation_context = format_history_context(limit=5)
@@ -686,6 +705,7 @@ def run_research_pipeline(query: str):
         writer_payload["debug_evidence_chars"] = len(evidence_text)
         writer_payload["user_query"] = query
         writer_payload["query_type"] = query_type
+        writer_payload["debug_query_type"] = _debug_query_type(query)
         writer_payload["mode"] = mode
         writer_payload["recommendation_query"] = _is_recommendation_query(query)
         writer_payload["has_resume_context"] = _has_resume_context(query, conversation_context)
@@ -697,12 +717,17 @@ def run_research_pipeline(query: str):
         if writer_payload["retrieved_context"] is None:
             writer_payload["retrieved_context"] = []
 
+        answer_payload = None
         if not evidence_usable:
-            answer_payload = _fallback_answer_payload_by_type(query, query_type)
-            fallback_triggered = True
-            logger.info("fallback_triggered=no_usable_evidence")
-            print("fallback_triggered=no_usable_evidence")
-        else:
+            if source_count == 0 or not (evidence_text or "").strip():
+                answer_payload = _fallback_answer_payload_by_type(query, query_type)
+                fallback_triggered = True
+                fallback_reason = "no_usable_evidence"
+                logger.info("fallback_triggered=no_usable_evidence")
+                print("fallback_triggered=no_usable_evidence")
+            else:
+                evidence_usable = True
+        if evidence_usable and answer_payload is None:
             try:
                 answer_payload = write(
                     plan_text,
@@ -726,15 +751,18 @@ def run_research_pipeline(query: str):
         if not isinstance(answer_payload, dict):
             answer_payload = _fallback_answer_payload_by_type(query, query_type)
             fallback_triggered = True
+            fallback_reason = "writer_non_dict"
             logger.info("fallback_triggered=writer_non_dict")
 
         key_findings = _build_key_findings(query, retrieved_context)
         final_report = _answer_payload_to_markdown(answer_payload)
         if _contains_report_style_language(final_report) or _is_generic_response(query, final_report):
-            answer_payload = _fallback_answer_payload_by_type(query, query_type)
-            final_report = _answer_payload_to_markdown(answer_payload)
-            fallback_triggered = True
-            logger.info("fallback_triggered=generic_or_report_style")
+            if source_count == 0 or not (evidence_text or "").strip():
+                answer_payload = _fallback_answer_payload_by_type(query, query_type)
+                final_report = _answer_payload_to_markdown(answer_payload)
+                fallback_triggered = True
+                fallback_reason = "generic_or_report_style"
+                logger.info("fallback_triggered=generic_or_report_style")
 
         logger.info("debug query=%s sources_fetched_count=%s evidence_length=%s fallback_triggered=%s", query, source_count, len(evidence_text), fallback_triggered)
         print(f"debug query={query} sources_fetched_count={source_count} evidence_length={len(evidence_text)} fallback_triggered={fallback_triggered}")
@@ -764,6 +792,8 @@ def run_research_pipeline(query: str):
             "fallback_triggered": fallback_triggered,
             "debug_source_count": source_count,
             "debug_evidence_length": len(evidence_text),
+            "debug_query_type": _debug_query_type(query),
+            "debug_fallback_reason": fallback_reason,
             "debug_retry_used": (research_data or {}).get("attempted_queries", []),
             "research": writer_payload,
             "final": final_report,

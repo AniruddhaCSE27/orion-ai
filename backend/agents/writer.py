@@ -126,7 +126,9 @@ def _fallback_answer(question: str, mode_key: str, evidence):
 
 
 def _parse_writer_output(text: str, question: str, mode_key: str, evidence):
-    direct_answer = _clean_text(_extract_section_block(text, "DIRECT ANSWER") or _extract_section_block(text, "FINAL ANSWER"))
+    direct_answer_block = _extract_section_block(text, "DIRECT ANSWER") or _extract_section_block(text, "FINAL ANSWER")
+    direct_answer = _clean_text(direct_answer_block)
+    direct_answer_bullets = _extract_bullets(direct_answer_block, limit=5)
     why_points = _extract_bullets(_extract_section_block(text, "WHY"), limit=5)
     key_points = _extract_bullets(_extract_section_block(text, "KEY INSIGHTS") or _extract_section_block(text, "KEY POINTS"), limit=5)
     evidence_points = _extract_bullets(_extract_section_block(text, "EVIDENCE"), limit=4)
@@ -137,7 +139,7 @@ def _parse_writer_output(text: str, question: str, mode_key: str, evidence):
 
     return {
         "primary_title": "Direct Answer",
-        "recommendations": [direct_answer],
+        "recommendations": direct_answer_bullets or [direct_answer],
         "reasons_title": "Why",
         "reasons": why_points or _context_bullets(evidence, limit=3),
         "insights_title": "Key Insights",
