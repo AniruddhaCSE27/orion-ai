@@ -1,220 +1,145 @@
-﻿# ORION AI
+# ORION AI
 
-An autonomous multi-agent RAG research system for turning a simple query into a structured, source-grounded research brief.
+ORION AI is a production-ready Autonomous Research and Web-based RAG system built with FastAPI, Streamlit, OpenAI, Tavily, and FAISS.
 
-ORION AI combines planning, live web research, retrieval, memory, and report generation in a polished Streamlit experience. It is designed to feel like a compact research copilot: take a user prompt, gather evidence from the web, ground the answer with retrieved context, and return a clean output with a research plan, key findings, final report, sources, and PDF export.
+It keeps the premium answer-first UI while using a deterministic backend pipeline:
 
-## Project Overview
+`Query -> Classification -> Tavily Retrieval -> Evidence Normalization -> Lightweight Reranking -> Writer -> Grounded Answer -> Report/PDF`
 
-ORION AI is a recruiter-friendly showcase of applied AI engineering across frontend, backend, retrieval, and orchestration layers.
+## What ORION Does
 
-It includes:
-- Multi-agent flow for research orchestration
-- Real-time web search with Tavily
-- FAISS-backed retrieval for source-grounded context
-- Lightweight conversational memory for continuity
-- Premium Streamlit UI for interactive research workflows
-- Professional PDF export for shareable reports
+- Runs web-grounded research using Tavily
+- Normalizes and reranks evidence before generation
+- Produces answer-first responses instead of generic fallback text
+- Preserves conversational memory for short follow-up context
+- Exports the final answer and sources as PDF
+- Exposes a FastAPI backend plus a Streamlit frontend
 
-The system is built to produce source-grounded responses designed to reduce hallucinations, while keeping the architecture modular and easy to extend.
-
-## Features
-
-- Planner -> Researcher -> Writer multi-agent pipeline
-- RAG pipeline with FAISS-based retrieval over research findings
-- Real-time web research using Tavily API
-- Source-grounded responses with visible sources and citation-style linking
-- Conversational memory for short-term context continuity
-- Structured output format:
-  - Research Plan
-  - Key Findings
-  - Final Report
-  - Sources
-- PDF export with formatted sections, metadata, and source list
-- Modular Python project structure with separated frontend, API, services, agents, and core config
-
-## Tech Stack
+## Core Stack
 
 - Python
-- Streamlit
 - FastAPI
+- Streamlit
 - OpenAI API
 - Tavily API
-- FAISS
+- FAISS (`faiss-cpu`)
 - ReportLab
-- JSON-based lightweight memory store
+- `python-dotenv`
 
-## Architecture
+## Active Entry Points
 
-ORION AI follows a simple but production-style research pipeline:
+Use these entry points for local runs and deployment:
 
-`Query -> Planner -> Researcher -> Retrieval -> Writer -> Output`
+- Streamlit frontend: `streamlit_app.py`
+- Backend API: `backend.main:app`
 
-### Flow
+Legacy root files now forward to the maintained frontend/backend modules so local runs and deployments stay aligned.
 
-1. The user submits a research query from the Streamlit frontend.
-2. The Planner creates a focused research plan.
-3. The Researcher performs live web search using Tavily.
-4. Research findings are embedded and stored in a FAISS vector store.
-5. Relevant `retrieved_context` is pulled back from the vector store.
-6. The Writer uses:
-   - the research plan
-   - retrieved context
-   - live findings
-   - recent conversation context
-7. The system returns a structured response:
-   - Research Plan
-   - Key Findings
-   - Final Report
-   - Sources
-8. The frontend renders the output and allows PDF export.
+## Environment Variables
 
-### Why Retrieved Context Matters
+Create a `.env` file from `.env.example`.
 
-The `retrieved_context` step grounds the final writing stage in the most relevant evidence collected during research. Instead of relying only on the LLM's general knowledge, ORION AI passes retrieved source snippets into the writer so the final answer stays closer to gathered evidence.
+Required:
 
-## Installation
-
-### Clone the repository
-
-```bash
-git clone https://github.com/AniruddhaCSE27/orion-ai.git
-cd orion-ai
+```env
+OPENAI_API_KEY=your_openai_api_key_here
+TAVILY_API_KEY=your_tavily_api_key_here
 ```
 
-### Install dependencies
+Recommended:
+
+```env
+BACKEND_URL=http://localhost:8000
+MODEL_NAME=gpt-4o-mini
+EMBEDDING_MODEL=text-embedding-3-small
+OPENAI_TIMEOUT_SECONDS=30
+```
+
+## Local Setup
+
+1. Install dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### Run locally
+2. Start the backend:
 
 ```bash
-streamlit run frontend/app.py
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-If you want to run the API layer independently, the backend app entry point is:
+3. In a second terminal, start the frontend:
 
 ```bash
-uvicorn backend.main:app --reload
+streamlit run streamlit_app.py
 ```
 
-## Environment Variables
+4. Open the Streamlit app in your browser.
 
-Create a `.env` file in the project root.
+## Deployment
 
-Required variables:
+### Streamlit Community Cloud
 
-```env
-OPENAI_API_KEY=your_openai_api_key
-TAVILY_API_KEY=your_tavily_api_key
+1. Deploy the repo and set the app entry file to `streamlit_app.py`.
+2. Add these secrets in the Streamlit dashboard:
+   - `OPENAI_API_KEY`
+   - `TAVILY_API_KEY`
+   - `BACKEND_URL`
+   - optional: `MODEL_NAME`, `EMBEDDING_MODEL`, `OPENAI_TIMEOUT_SECONDS`
+3. Point `BACKEND_URL` to your deployed FastAPI backend.
+
+### Render or Similar Backend Hosting
+
+Start command:
+
+```bash
+uvicorn backend.main:app --host 0.0.0.0 --port $PORT
 ```
 
-Optional configuration:
+Set the same environment variables on the backend service, except `BACKEND_URL` is only needed by the frontend deployment.
 
-```env
-MODEL_NAME=gpt-4o-mini
-EMBEDDING_MODEL=text-embedding-3-small
+## Response Contract
+
+The backend returns a stable JSON structure shaped like:
+
+```json
+{
+  "success": true,
+  "query": "best ai tools for students",
+  "mode": "Web Recommendations",
+  "answer": "...",
+  "direct_answer": "...",
+  "plan": "...",
+  "evidence": [],
+  "sources": [],
+  "source_count": 4,
+  "report": "...",
+  "report_word_count": 120,
+  "plan_word_count": 35,
+  "debug": {
+    "raw_result_count": 4,
+    "usable_evidence_count": 4,
+    "reranked_evidence_count": 4,
+    "writer_output_length": 220,
+    "fallback_triggered_reason": ""
+  },
+  "error": ""
+}
 ```
 
-An example file is already included:
+If no usable search results exist, ORION returns `No relevant live data found.` and an empty source list.
 
-`/.env.example`
+## Verification
 
-## Project Structure
+Recommended checks before shipping:
 
-```text
-orion-ai/
-├── frontend/
-│   ├── app.py
-│   └── utils/
-│       ├── __init__.py
-│       └── charts.py
-├── backend/
-│   ├── api/
-│   │   ├── __init__.py
-│   │   └── routes.py
-│   ├── agents/
-│   │   ├── __init__.py
-│   │   ├── analyst.py
-│   │   ├── critic.py
-│   │   ├── planner.py
-│   │   ├── researcher.py
-│   │   └── writer.py
-│   ├── core/
-│   │   ├── __init__.py
-│   │   └── config.py
-│   ├── data/
-│   │   └── memory.json
-│   ├── models/
-│   │   └── __init__.py
-│   ├── services/
-│   │   ├── __init__.py
-│   │   ├── memory.py
-│   │   ├── research_service.py
-│   │   └── vector_store.py
-│   ├── __init__.py
-│   └── main.py
-├── agents/                 # legacy compatibility copies
-├── tools/                  # legacy compatibility copies
-├── utils/                  # legacy compatibility copies
-├── .env.example
-├── app.py                  # legacy compatibility entry
-├── main.py                 # legacy compatibility entry
-├── memory.db
-├── requirements.txt
-└── README.md
+```bash
+python -m py_compile backend/main.py backend/api/routes.py backend/services/research_service.py backend/agents/writer.py frontend/app.py app.py main.py streamlit_app.py
 ```
 
-## Live Demo
+## Notes
 
-- Streamlit frontend: Add your deployed Streamlit URL here once published
-- Live backend API: [ORION Backend on Render](https://orion-backend-s0e6.onrender.com)
-
-If a public Streamlit deployment already exists outside this repository, replace the placeholder above with the actual app URL.
-
-## Screenshots
-
-Add screenshots here after deployment polish:
-
-- `docs/screenshots/home.png`
-- `docs/screenshots/report-view.png`
-- `docs/screenshots/pdf-export.png`
-
-Suggested markdown:
-
-```md
-![Home UI](docs/screenshots/home.png)
-![Report View](docs/screenshots/report-view.png)
-![PDF Export](docs/screenshots/pdf-export.png)
-```
-
-## Future Improvements
-
-- Document upload and PDF chat
-- Evaluation metrics for retrieval quality and answer grounding
-- Pinecone integration for scalable vector storage
-- User authentication and saved workspaces
-- Background jobs for longer research tasks
-
-## Why This Project Stands Out
-
-ORION AI demonstrates more than prompt chaining. It shows end-to-end applied AI product thinking:
-
-- modular backend architecture
-- retrieval-augmented generation
-- source-grounded answer design
-- conversational context management
-- UI/UX polish for AI workflows
-- export-ready reporting
-
-This makes it a strong portfolio project for roles involving AI engineering, LLM apps, full-stack product development, and agentic workflows.
-
-## Author
-
-**Aniruddha Pathak**
-
-## License
-
-Add a license file if you want to open-source the project formally.
+- The frontend design remains intact while the answer rendering path now prefers real backend output.
+- The backend no longer exposes the broken document indexing path.
+- FAISS reranking/cache is best-effort; if it fails, ORION still answers using normalized Tavily evidence.

@@ -1,13 +1,10 @@
 import logging
-import importlib.util
-from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
-from backend.services.document_ingestion import index_document, save_uploaded_file
 from backend.services.memory import clear_memory
 from backend.services.research_service import run_research_pipeline
 
@@ -77,8 +74,23 @@ def health():
 
 
 @router.post("/research")
-def run_research(query: str):
+async def run_research(request: Request, query: Optional[str] = None):
     try:
+        if not query:
+            try:
+                body = await request.json()
+            except Exception:
+                body = {}
+            if isinstance(body, dict):
+                query = body.get("query") or query
+
+        if not query or not str(query).strip():
+            return _json_response(
+                "run_research",
+                _error_payload("Query is required."),
+                status_code=400,
+            )
+
         payload = run_research_pipeline(query)
         status_code = 200 if payload.get("success", False) else 500
         return _json_response("run_research", payload, status_code=status_code)
@@ -107,62 +119,5 @@ def clear_research_memory():
         return _json_response(
             "clear_research_memory",
             _error_payload("Failed to clear memory.", str(exc)),
-            status_code=500,
-        )
-
-
-@router.post("/documents/index")
-async def index_documents(request: Request):
-    try:
-        if importlib.util.find_spec("multipart") is None:
-            return _json_response(
-                "index_documents",
-                _error_payload("Document uploads require the 'python-multipart' package."),
-                status_code=500,
-            )
-
-        form = await request.form()
-        files = form.getlist("files")
-        indexed_files = []
-
-        for upload in files:
-            filename = getattr(upload, "filename", "") or ""
-            if not filename:
-                continue
-
-            suffix = Path(filename).suffix.lower()
-            if suffix not in {".pdf", ".txt"}:
-                return _json_response(
-                    "index_documents",
-                    _error_payload(f"Unsupported file type: {filename}"),
-                    status_code=400,
-                )
-
-            content = await upload.read()
-            saved_path = save_uploaded_file(filename, content)
-            indexed_files.append(index_document(saved_path))
-
-        if not indexed_files:
-            return _json_response(
-                "index_documents",
-                _error_payload("No supported files were provided."),
-                status_code=400,
-            )
-
-        payload = {
-            "success": True,
-            "message": "Documents indexed successfully.",
-            "files": indexed_files,
-            "pages_read": sum(int(item.get("pages_read", 0)) for item in indexed_files),
-            "characters_extracted": sum(int(item.get("characters_extracted", 0)) for item in indexed_files),
-            "chunks_created": sum(int(item.get("chunks_indexed", 0)) for item in indexed_files),
-            "indexed_document_count": max(int(item.get("indexed_document_count", 0)) for item in indexed_files),
-        }
-        return _json_response("index_documents", payload)
-    except Exception as exc:
-        logger.exception("endpoint=index_documents failed")
-        return _json_response(
-            "index_documents",
-            _error_payload("Document indexing failed.", str(exc)),
             status_code=500,
         )

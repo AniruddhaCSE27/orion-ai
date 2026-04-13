@@ -1,3 +1,4 @@
+import os
 import time
 from datetime import datetime
 from io import BytesIO
@@ -18,7 +19,18 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-BACKEND_URL = "https://orion-backend-s0e6.onrender.com"
+
+def _resolve_backend_url():
+    if "BACKEND_URL" in st.secrets:
+        return st.secrets["BACKEND_URL"]
+    return (
+        os.getenv("BACKEND_URL")
+        or os.getenv("ORION_BACKEND_URL")
+        or "http://localhost:8000"
+    )
+
+
+BACKEND_URL = _resolve_backend_url()
 
 st.markdown("""
 <style>
@@ -845,25 +857,76 @@ def has_user_facing_list(items):
     return any(has_user_facing_content(item) for item in items if isinstance(item, str))
 
 
-def fallback_answer_payload(query_type="web", user_query=""):
-    return {
-        "primary_title": "Direct Answer",
-        "recommendations": ["I couldn't find enough reliable live data for this query right now."],
-        "reasons_title": "Why",
-        "reasons": [],
-        "insights_title": "Key Insights",
-        "insights": "",
-        "improvement_title": "",
-        "improvement_tips": [],
-        "extra_sections": [],
-    }
+def build_answer_from_evidence(sources):
+    lines = []
+    for source in (sources or [])[:5]:
+        title = normalize_markdown(source.get("title", "")).strip()
+        snippet = normalize_markdown(source.get("content", "")).strip()
+        if title and snippet:
+            lines.append(f"- {title}: {snippet}")
+        elif title:
+            lines.append(f"- {title}")
+        elif snippet:
+            lines.append(f"- {snippet}")
+        if len(lines) >= 5:
+            break
+    return "\n".join(lines).strip()
 
 
-def normalize_answer_payload(answer_payload, query_type="general", user_query=""):
-    fallback = fallback_answer_payload(query_type=query_type or "web", user_query=user_query)
+def select_render_answer(response):
+    source_count = int(response.get("source_count", 0) or 0)
+    answer = (
+        normalize_markdown(response.get("direct_answer", "")) or
+        normalize_markdown(response.get("answer", "")) or
+        normalize_markdown(response.get("report", ""))
+    )
 
+    lowered = answer.lower()
+    contains_bad_fallback = (
+        "i couldn't find enough reliable live data" in lowered or
+        "not enough reliable" in lowered
+    )
+
+    if (not answer or contains_bad_fallback) and source_count > 0:
+        answer = build_answer_from_evidence(response.get("sources", []))
+
+    return answer.strip()
+
+
+def _best_answer_lines(*values, limit=5):
+    items = []
+    for value in values:
+        normalized = normalize_markdown(value or "")
+        if not normalized:
+            continue
+        for line in normalized.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("## "):
+                continue
+            if stripped.startswith(("- ", "* ")):
+                item = stripped[2:].strip()
+            else:
+                item = stripped
+            if item and has_user_facing_content(item):
+                items.append(item)
+        if items:
+            break
+    deduped = []
+    seen = set()
+    for item in items:
+        lowered = item.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        deduped.append(item)
+        if len(deduped) >= limit:
+            break
+    return deduped
+
+
+def normalize_answer_payload(answer_payload, query_type="general", user_query="", direct_answer="", final_text=""):
     if not isinstance(answer_payload, dict):
-        return fallback
+        answer_payload = {}
 
     recommendations = [
         item.strip() for item in answer_payload.get("recommendations", [])
@@ -883,10 +946,9 @@ def normalize_answer_payload(answer_payload, query_type="general", user_query=""
     ][:5]
 
     if not recommendations:
-        recommendations = [raw_answer] if raw_answer else fallback["recommendations"]
-
+        recommendations = _best_answer_lines(direct_answer, raw_answer, final_text)
     extra_sections = []
-    raw_extra_sections = answer_payload.get("extra_sections", fallback.get("extra_sections", []))
+    raw_extra_sections = answer_payload.get("extra_sections", [])
     if isinstance(raw_extra_sections, list):
         for section in raw_extra_sections[:6]:
             if not isinstance(section, dict):
@@ -901,14 +963,14 @@ def normalize_answer_payload(answer_payload, query_type="general", user_query=""
                 extra_sections.append({"title": title, "items": items})
 
     return {
-        "primary_title": answer_payload.get("primary_title", fallback["primary_title"]),
+        "primary_title": answer_payload.get("primary_title", "Direct Answer"),
         "recommendations": recommendations,
-        "reasons_title": answer_payload.get("reasons_title", fallback["reasons_title"]),
+        "reasons_title": answer_payload.get("reasons_title", "Why"),
         "reasons": reasons,
-        "insights_title": answer_payload.get("insights_title", fallback["insights_title"]),
+        "insights_title": answer_payload.get("insights_title", "Key Insights"),
         "insights": insights,
-        "improvement_title": answer_payload.get("improvement_title", fallback["improvement_title"]),
-        "improvement_tips": improvement_tips or fallback.get("improvement_tips", []),
+        "improvement_title": answer_payload.get("improvement_title", ""),
+        "improvement_tips": improvement_tips,
         "extra_sections": extra_sections,
         "raw_answer": raw_answer,
     }
@@ -1074,6 +1136,9 @@ if st.button("Run Research", use_container_width=False):
     if not query.strip():
         st.warning("Please enter a research topic.")
     else:
+        st.session_state.pop("answer", None)
+        st.session_state.pop("response", None)
+
         st.markdown("""
         <div class="card">
             <div class="section-kicker">Workflow</div>
@@ -1165,22 +1230,39 @@ if st.button("Run Research", use_container_width=False):
                 st.error(backend_error_message(response, data))
                 st.stop()
 
+            print("DEBUG FINAL RESPONSE:", data)
+            st.write("DEBUG:", data)
+
             plan_text = data.get("plan", "")
             findings_text = data.get("key_findings", data.get("findings", ""))
-            final_text = data.get("final_report", data.get("final", ""))
-            structured_response = data.get("structured_response", final_text)
+            render_answer = select_render_answer(data)
+            direct_answer = render_answer
+            final_text = data.get("report", "")
+            structured_response = data.get("structured_response", final_text or render_answer)
             research_payload = data.get("research", {})
             web_sources = data.get("web_sources", []) or data.get("sources", []) or extract_sources(research_payload)
             sources = web_sources
-            debug_source_count = data.get("research", {}).get("debug_source_count", len(web_sources))
+            debug_payload = data.get("debug", {}) if isinstance(data.get("debug"), dict) else {}
+            debug_source_count = data.get("source_count", debug_payload.get("usable_evidence_count", len(web_sources)))
+            if not direct_answer and debug_source_count > 0:
+                direct_answer = build_answer_from_evidence(web_sources)
             metrics = build_metrics(plan_text, final_text, sources)
-            query_type = data.get("query_type", "web")
+            query_type = data.get("query_type", "factual")
             mode_label = data.get("mode", "Web Research")
             answer_payload = normalize_answer_payload(
                 data.get("answer_payload", {}),
                 query_type=query_type,
                 user_query=query,
+                direct_answer=direct_answer,
+                final_text=final_text,
             )
+            recommendation_text = "\n".join(answer_payload.get("recommendations", []))
+            recommendation_has_bad_fallback = (
+                "i couldn't find enough reliable live data" in recommendation_text.lower() or
+                "not enough reliable" in recommendation_text.lower()
+            )
+            if (not answer_payload.get("recommendations") or recommendation_has_bad_fallback) and direct_answer:
+                answer_payload["recommendations"] = _best_answer_lines(direct_answer)
             primary_title = answer_payload["primary_title"]
             recommendations = answer_payload["recommendations"]
             reasons_title = answer_payload["reasons_title"]
@@ -1190,7 +1272,9 @@ if st.button("Run Research", use_container_width=False):
             improvement_title = answer_payload["improvement_title"]
             improvement_tips = answer_payload["improvement_tips"]
             extra_sections = answer_payload["extra_sections"]
-            quick_insights = recommendations[:5]
+            quick_insights = recommendations[:5] or _best_answer_lines(direct_answer, final_text)
+            st.session_state["answer"] = direct_answer
+            st.session_state["response"] = data
 
             progress.progress(100)
 
@@ -1263,14 +1347,17 @@ if st.button("Run Research", use_container_width=False):
             </div>
             """, unsafe_allow_html=True)
 
-            top_recommendations_text = "\n".join(f"- {item}" for item in recommendations)
+            top_recommendations_text = "\n".join(f"- {item}" for item in recommendations if has_user_facing_content(item))
+            if not top_recommendations_text:
+                top_recommendations_text = normalize_markdown(direct_answer or final_text)
             st.markdown(f"""
             <div class="top-answer-shell">
                 <div class="top-answer-kicker">Primary Output</div>
                 <div class="top-answer-title">{primary_title}</div>
             </div>
             """, unsafe_allow_html=True)
-            st.markdown(top_recommendations_text)
+            if top_recommendations_text:
+                st.markdown(top_recommendations_text)
 
             if has_user_facing_list(reasons):
                 with st.expander(reasons_title, expanded=False):
