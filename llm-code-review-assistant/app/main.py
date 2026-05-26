@@ -3,14 +3,14 @@ from __future__ import annotations
 import argparse
 from typing import Optional
 
+from app.config import get_settings
+from app.factory import create_reviewer
+from app.github_client import GitHubClientError
+
 try:
     from rich.console import Console
 except ImportError:  # pragma: no cover - exercised via runtime fallback
     Console = None  # type: ignore[assignment]
-
-    from app.config import get_settings
-    from app.factory import create_reviewer
-    from app.github_client import GitHubClientError
 
 
 def build_argument_parser() -> argparse.ArgumentParser:

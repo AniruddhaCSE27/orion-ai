@@ -65,8 +65,12 @@ class ParsedDiffFile(BaseModel):
     patch: str
 
     def contains_line(self, line_number: int) -> bool:
-        """Return whether a line number falls inside the changed ranges."""
+        """Return whether a line number falls inside the diff hunk range."""
         return any(start <= line_number <= end for start, end in self.changed_line_ranges)
+
+    def contains_added_line(self, line_number: int) -> bool:
+        """Return whether a line number is one of the actual changed new-file lines."""
+        return line_number in self.added_lines
 
 
 class PullRequestFile(BaseModel):
@@ -105,11 +109,7 @@ class ASTIssue(BaseModel):
     """A deterministic AST analysis issue."""
 
     issue_type: Literal[
-        "long_function",
-        "deep_nesting",
         "broad_exception",
-        "missing_docstring",
-        "too_many_parameters",
         "parse_error",
         "mutable_default",
     ]

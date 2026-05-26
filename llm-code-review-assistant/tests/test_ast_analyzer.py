@@ -18,15 +18,12 @@ def complicated(a, b, c, d, e, f):
         return 0
 """
 
-    analyzer = ASTAnalyzer(AnalyzerThresholds(long_function_lines=5, deep_nesting_level=3, too_many_parameters=5))
+    analyzer = ASTAnalyzer(AnalyzerThresholds())
     analysis = analyzer.analyze_file("app/example.py", source_code)
     issue_types = {issue.issue_type for issue in analysis.issues}
 
-    assert "long_function" in issue_types
-    assert "deep_nesting" in issue_types
     assert "broad_exception" in issue_types
-    assert "missing_docstring" in issue_types
-    assert "too_many_parameters" in issue_types
+    assert "mutable_default" not in issue_types
 
 
 def test_ast_analyzer_reports_parse_error() -> None:

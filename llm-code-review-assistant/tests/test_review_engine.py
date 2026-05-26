@@ -249,5 +249,170 @@ def test_review_engine_returns_no_significant_issues_when_only_generic_feedback_
     context.heuristic_findings = []
     result = engine.generate_review(context)
 
-    assert result.summary == "No significant issues found in the changed lines."
+    assert result.summary == "The pull request is focused and no significant issues were found in the changed lines."
     assert result.findings == []
+
+
+def test_review_engine_rejects_findings_on_unchanged_context_lines_within_hunk() -> None:
+    engine = ReviewEngine(_build_settings())
+    engine._client = _FakeClient(
+        """
+        {
+          "summary": "Found one issue.",
+          "overall_risk": "medium",
+          "findings": [
+            {
+              "title": "Context line issue",
+              "issue_type": "bug_risk",
+              "severity": "medium",
+              "confidence": 0.9,
+              "file": "app/service.py",
+              "line_hint": 3,
+              "impact": "Bad impact",
+              "explanation": "This line is inside the hunk but not actually changed.",
+              "suggestion": "Fix it.",
+              "evidence_source": "llm"
+            }
+          ]
+        }
+        """
+    )
+
+    context = _build_context()
+    context.heuristic_findings = []
+    result = engine.generate_review(context)
+
+    assert result.findings == []
+    assert result.summary == "The pull request is focused and no significant issues were found in the changed lines."
+
+
+def test_review_engine_rejects_positive_non_issue_findings() -> None:
+    engine = ReviewEngine(_build_settings())
+    engine._client = _FakeClient(
+        """
+        {
+          "summary": "Test added to verify the behavior and the implementation looks good.",
+          "overall_risk": "low",
+          "findings": [
+            {
+              "title": "Test added to verify behavior",
+              "issue_type": "bug_risk",
+              "severity": "low",
+              "confidence": 0.8,
+              "file": "app/service.py",
+              "line_hint": 2,
+              "impact": "This improves confidence in the change.",
+              "explanation": "The new test covers the intended behavior correctly.",
+              "suggestion": "No changes recommended.",
+              "evidence_source": "llm"
+            }
+          ]
+        }
+        """
+    )
+
+    context = _build_context()
+    context.heuristic_findings = []
+    result = engine.generate_review(context)
+
+    assert result.findings == []
+    assert result.summary == "The pull request is focused and no significant issues were found in the changed lines."
+
+
+def test_review_engine_rejects_docstring_findings_at_final_stage() -> None:
+    engine = ReviewEngine(_build_settings())
+    engine._client = _FakeClient(
+        """
+        {
+          "summary": "A docstring issue was found.",
+          "overall_risk": "low",
+          "findings": [
+            {
+              "title": "Missing docstring on helper",
+              "issue_type": "bug_risk",
+              "severity": "low",
+              "confidence": 0.75,
+              "file": "app/service.py",
+              "line_hint": 2,
+              "impact": "Documentation is missing.",
+              "explanation": "The changed function does not have a docstring.",
+              "suggestion": "Add a docstring.",
+              "evidence_source": "llm"
+            }
+          ]
+        }
+        """
+    )
+
+    context = _build_context()
+    context.heuristic_findings = []
+    result = engine.generate_review(context)
+
+    assert result.findings == []
+    assert result.summary == "The pull request is focused and no significant issues were found in the changed lines."
+
+
+def test_review_engine_rejects_long_function_findings_at_final_stage() -> None:
+    engine = ReviewEngine(_build_settings())
+    engine._client = _FakeClient(
+        """
+        {
+          "summary": "The function is too long.",
+          "overall_risk": "low",
+          "findings": [
+            {
+              "title": "Long function in changed code",
+              "issue_type": "maintainability",
+              "severity": "medium",
+              "confidence": 0.8,
+              "file": "app/service.py",
+              "line_hint": 2,
+              "impact": "The function is long.",
+              "explanation": "This changed function is now a long function.",
+              "suggestion": "Split it into smaller helpers.",
+              "evidence_source": "llm"
+            }
+          ]
+        }
+        """
+    )
+
+    context = _build_context()
+    context.heuristic_findings = []
+    result = engine.generate_review(context)
+
+    assert result.findings == []
+    assert result.summary == "The pull request is focused and no significant issues were found in the changed lines."
+
+
+def test_review_engine_rejects_ast_only_findings_at_final_stage() -> None:
+    engine = ReviewEngine(_build_settings())
+    engine._client = _FakeClient(
+        """
+        {
+          "summary": "Found one AST issue.",
+          "overall_risk": "low",
+          "findings": [
+            {
+              "title": "Generic AST maintainability issue",
+              "issue_type": "maintainability",
+              "severity": "medium",
+              "confidence": 0.82,
+              "file": "app/service.py",
+              "line_hint": 2,
+              "impact": "AST analysis found a style issue.",
+              "explanation": "This finding is derived only from AST structure.",
+              "suggestion": "Refactor the function.",
+              "evidence_source": "ast"
+            }
+          ]
+        }
+        """
+    )
+
+    context = _build_context()
+    context.heuristic_findings = []
+    result = engine.generate_review(context)
+
+    assert result.findings == []
+    assert result.summary == "The pull request is focused and no significant issues were found in the changed lines."

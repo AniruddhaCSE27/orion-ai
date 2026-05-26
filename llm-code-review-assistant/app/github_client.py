@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 from typing import Any, Optional
 
-import httpx
+import requests
 
 from app.config import Settings
 from app.schemas import PullRequestData, PullRequestFile, PullRequestMetadata
@@ -27,11 +27,9 @@ class GitHubClient:
             headers["Authorization"] = f"Bearer {settings.github_token}"
 
         self._settings = settings
-        self._client = httpx.Client(
-            base_url=settings.github_api_base_url.rstrip("/"),
-            headers=headers,
-            timeout=settings.request_timeout_seconds,
-        )
+        self._base_url = settings.github_api_base_url.rstrip("/")
+        self._client = requests.Session()
+        self._client.headers.update(headers)
 
     def fetch_pull_request(self, owner: str, repo: str, pr_number: int) -> PullRequestData:
         """Fetch pull request metadata, changed files, patches, and Python contents."""
@@ -109,8 +107,12 @@ class GitHubClient:
 
     def _get_json(self, path: str, params: Optional[dict[str, Any]] = None) -> Any:
         try:
-            response = self._client.get(path, params=params)
-        except httpx.HTTPError as exc:
+            response = self._client.get(
+                f"{self._base_url}{path}",
+                params=params,
+                timeout=self._settings.request_timeout_seconds,
+            )
+        except requests.RequestException as exc:
             raise GitHubClientError(f"GitHub API request failed: {exc}") from exc
         if response.status_code >= 400:
             raise GitHubClientError(

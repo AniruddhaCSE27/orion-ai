@@ -45,3 +45,17 @@ def test_contains_line_matches_changed_ranges() -> None:
     assert parsed.contains_line(4) is True
     assert parsed.contains_line(5) is True
     assert parsed.contains_line(9) is False
+
+
+def test_contains_added_line_matches_only_real_changed_lines() -> None:
+    patch = """@@ -3,2 +3,3 @@
+ line_3
++line_4
+ line_5
+"""
+
+    parsed = DiffParser().parse_patch("app/example.py", patch)
+
+    assert parsed.contains_added_line(3) is False
+    assert parsed.contains_added_line(4) is True
+    assert parsed.contains_added_line(5) is False

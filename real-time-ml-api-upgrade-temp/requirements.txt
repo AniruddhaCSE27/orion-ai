@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+scikit-learn
+joblib
+pydantic
+pydantic-settings
+pandas
+python-jose[cryptography]
+python-multipart
+slowapi
+pytest
+httpx
+

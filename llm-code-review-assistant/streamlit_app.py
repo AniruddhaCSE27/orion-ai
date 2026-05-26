@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Optional
+from typing import Iterable
 
 import streamlit as st
 
@@ -42,28 +42,78 @@ def _render_findings(findings) -> None:
                 f"{finding.severity.upper()} | {finding.issue_type} | "
                 f"{finding.file}:{finding.line_hint} | confidence {finding.confidence:.2f}"
             )
-            st.write(f"Impact: {finding.impact}")
-            st.write(f"Explanation: {finding.explanation}")
-            st.write(f"Suggestion: {finding.suggestion}")
+            st.markdown(f"**Impact**  \n{finding.impact}")
+            st.markdown(f"**Explanation**  \n{finding.explanation}")
+            st.markdown(f"**Suggestion**  \n{finding.suggestion}")
             st.caption(f"Evidence source: {finding.evidence_source}")
+
+
+def _render_runtime_warnings(messages: Iterable[str]) -> None:
+    for message in messages:
+        st.warning(message, icon="!")
 
 
 def main() -> None:
     st.set_page_config(
-        page_title="ORION AI Reviewer",
+        page_title="LLM Code Review Assistant",
         page_icon="🔍",
         layout="wide",
-        initial_sidebar_state="expanded",
+        initial_sidebar_state="collapsed",
     )
     _load_streamlit_secrets()
-
-    st.title("ORION AI Pull Request Reviewer")
-    st.caption("Strict diff-aware code review for changed lines only.")
-
-    with st.sidebar:
-        st.header("How It Works")
-        st.write("Review is limited to changed diff lines and grounded by diff, AST, heuristic, and LLM evidence.")
-        st.write("Set `OPENAI_API_KEY`, `GITHUB_TOKEN`, and optionally `OPENAI_MODEL` in environment variables or Streamlit secrets.")
+    st.markdown(
+        """
+        <style>
+        .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+            max-width: 1200px;
+        }
+        .hero-card {
+            border: 1px solid rgba(49, 51, 63, 0.18);
+            border-radius: 20px;
+            padding: 1.4rem 1.5rem;
+            background:
+                radial-gradient(circle at top left, rgba(12, 147, 211, 0.14), transparent 35%),
+                linear-gradient(135deg, rgba(245, 247, 250, 0.95), rgba(255, 255, 255, 1));
+            margin-bottom: 1rem;
+        }
+        .hero-kicker {
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            font-size: 0.82rem;
+            color: #0c67a0;
+            font-weight: 700;
+        }
+        .hero-title {
+            font-size: 2.2rem;
+            line-height: 1.1;
+            margin: 0.35rem 0 0.7rem 0;
+            font-weight: 700;
+            color: #12202f;
+        }
+        .hero-copy {
+            font-size: 1rem;
+            color: #314150;
+            max-width: 760px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <div class="hero-card">
+            <div class="hero-kicker">Codex-Style Review Pipeline</div>
+            <div class="hero-title">LLM Code Review Assistant</div>
+            <div class="hero-copy">
+                Diff-aware pull request review grounded by structured patch parsing, AST checks,
+                rule-based heuristics, and validated LLM synthesis.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     try:
         settings = get_settings()
@@ -72,7 +122,12 @@ def main() -> None:
         st.info("Add the required keys in your environment or Streamlit app secrets before running a review.")
         return
 
-    st.caption(f"Model: `{settings.openai_model}`")
+    _render_runtime_warnings(settings.missing_optional_integrations())
+
+    top_col1, top_col2, top_col3 = st.columns(3)
+    top_col1.metric("Model", settings.openai_model)
+    top_col2.metric("Review Scope", "Changed Lines")
+    top_col3.metric("Pipeline", "Diff -> AST -> Rules -> LLM")
 
     left, right = st.columns([2, 1])
     with left:
@@ -93,7 +148,7 @@ def main() -> None:
         pr_number_raw = st.text_input("PR Number", value=pr_value, placeholder="123")
 
     if not owner and not repo and not pr_number_raw:
-        st.info("Enter a GitHub PR URL or provide owner, repo, and PR number to start a review.")
+        st.info("Enter a GitHub PR URL or provide owner, repo, and PR number to generate a grounded review.")
 
     if st.button("Run Review", type="primary", use_container_width=True):
         if not owner.strip() or not repo.strip() or not pr_number_raw.strip():

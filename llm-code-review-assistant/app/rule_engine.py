@@ -20,7 +20,9 @@ class RuleBasedReviewer:
         for analysis in ast_analyses:
             diff = diff_map.get(analysis.file)
             for issue in analysis.issues:
-                if diff is not None and diff.added_lines and not diff.contains_line(issue.line):
+                if diff is None:
+                    continue
+                if not diff.contains_added_line(issue.line):
                     continue
                 finding = self._issue_to_finding(
                     issue_type=issue.issue_type,
@@ -46,18 +48,6 @@ class RuleBasedReviewer:
                 impact="Catching every exception can mask real defects and turn unexpected failures into silent fallback behavior.",
                 explanation=f"The updated code uses a bare `except:` block. {evidence}",
                 suggestion="Catch expected exception types explicitly and log or re-raise unexpected failures.",
-                evidence_source="heuristic",
-            ),
-            "deep_nesting": ReviewFinding(
-                title="New branching depth increases edge-case risk",
-                issue_type="bug_risk",
-                severity="medium",
-                confidence=0.79,
-                file=file_path,
-                line_hint=line,
-                impact="Additional decision depth makes it easier for new branches to bypass validation or produce inconsistent outcomes on edge cases.",
-                explanation=f"The diff introduces control flow that exceeds the configured nesting threshold. {evidence}",
-                suggestion="Reduce the number of nested branches in the changed path so each outcome is validated explicitly.",
                 evidence_source="heuristic",
             ),
             "parse_error": ReviewFinding(

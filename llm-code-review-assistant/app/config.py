@@ -15,13 +15,9 @@ load_dotenv(PROJECT_ROOT.parent / ".env")
 
 
 class AnalyzerThresholds(BaseModel):
-    """Configurable thresholds for AST-based review checks."""
+    """Reserved AST configuration for future high-signal checks."""
 
     model_config = ConfigDict(frozen=True)
-
-    long_function_lines: int = 40
-    deep_nesting_level: int = 3
-    too_many_parameters: int = 5
 
 
 class Settings(BaseModel):
@@ -44,13 +40,22 @@ class Settings(BaseModel):
     def thresholds(self) -> AnalyzerThresholds:
         return AnalyzerThresholds()
 
+    def missing_optional_integrations(self) -> list[str]:
+        """Return non-fatal integration gaps that reduce review fidelity."""
+        missing: list[str] = []
+        if not self.github_token:
+            missing.append("GITHUB_TOKEN is not set; GitHub API rate limits will be much lower.")
+        return missing
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Load cached application settings from local and parent .env files."""
     openai_api_key = os.getenv("OPENAI_API_KEY")
     if not openai_api_key:
-        raise ValueError("OPENAI_API_KEY environment variable is required.")
+        raise ValueError(
+            "OPENAI_API_KEY is required. Set it in the environment or in a local .env file before running reviews."
+        )
 
     return Settings(
         github_token=os.getenv("GITHUB_TOKEN"),

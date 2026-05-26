@@ -35,7 +35,7 @@ class ReportFormatter:
         ]
 
         if not review.findings:
-            lines.append("- No actionable issues identified from the supplied evidence.")
+            lines.append("No significant issues found in the changed lines.")
             return "\n".join(lines)
 
         for finding in review.findings:
@@ -46,13 +46,12 @@ class ReportFormatter:
                     f"- Severity: `{finding.severity}`",
                     f"- Confidence: `{finding.confidence:.2f}`",
                     f"- Type: `{finding.issue_type}`",
-                    f"  - File: `{finding.file}`",
-                    f"  - Line hint: `{finding.line_hint}`",
-                    f"  - Evidence source: `{finding.evidence_source}`",
-                    f"  - Impact: {finding.impact}",
-                    f"  - Why this matters: {finding.impact}",
-                    f"  - Explanation: {finding.explanation}",
-                    f"  - Suggestion: {finding.suggestion}",
+                    f"- File: `{finding.file}`",
+                    f"- Line hint: `{finding.line_hint}`",
+                    f"- Evidence source: `{finding.evidence_source}`",
+                    f"- Impact: {finding.impact}",
+                    f"- Explanation: {finding.explanation}",
+                    f"- Suggestion: {finding.suggestion}",
                     "",
                 ]
             )
@@ -76,7 +75,7 @@ class ReportFormatter:
             )
         )
         if not review.findings:
-            console.print("[green]No actionable issues identified from the supplied evidence.[/green]")
+            console.print("[green]No significant issues found in the changed lines.[/green]")
             return
 
         table = Table(title="Review Findings", show_lines=True)
