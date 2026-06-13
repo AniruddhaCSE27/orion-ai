@@ -8,5 +8,4 @@ numpy==1.26.4
 pydantic==2.8.2
 fpdf==1.7.2
 reportlab==4.2.2
-tiktoken==0.7.0
 beautifulsoup4==4.12.3
